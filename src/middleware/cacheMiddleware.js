@@ -6,16 +6,25 @@ const cacheService = require('../services/cache');
  */
 
 const cacheMiddleware = async (req, res, next) => {
-  // Only cache specific endpoints
-  if (!req.body.endpoint) {
+  const { api } = req.params;
+  const userId = req.user?.userId || 'anonymous';
+
+  // Determine endpoint and payload depending on method
+  const isGet = req.method === 'GET';
+  const endpoint = isGet ? (req.query?.endpoint || null) : (req.body?.endpoint || null);
+
+  // Only cache when endpoint is provided
+  if (!endpoint) {
     return next();
   }
 
-  const { api } = req.params;
-  const { endpoint, ...body } = req.body;
+  // For GET cache, include query minus endpoint; for others, include body minus endpoint
+  const payload = isGet
+    ? Object.fromEntries(Object.entries(req.query || {}).filter(([k]) => k !== 'endpoint'))
+    : Object.fromEntries(Object.entries(req.body || {}).filter(([k]) => k !== 'endpoint'));
 
-  // Generate cache key
-  const cacheKey = cacheService.generateKey(api, endpoint, body);
+  // Generate cache key (scoped by user and method)
+  const cacheKey = cacheService.generateKey({ api, endpoint, payload, userId, method: req.method });
 
   try {
     // Try to get from cache

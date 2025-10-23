@@ -19,7 +19,8 @@
       "Bash(del /s /q prismamigrations*)",
       "Bash(npx prisma db push:*)",
       "Bash(timeout:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

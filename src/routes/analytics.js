@@ -14,6 +14,14 @@ const AnalyticsService = require('../services/analytics');
  */
 router.get('/overview', authenticateToken, async (req, res) => {
   try {
+    // Restrict system-wide overview to admin key
+    const adminKey = req.headers['x-admin-key'];
+    if (adminKey !== process.env.ADMIN_API_KEY) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin key required for overview analytics'
+      });
+    }
     const { startDate, endDate } = req.query;
 
     const start = startDate ? new Date(startDate) : null;

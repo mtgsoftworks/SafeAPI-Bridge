@@ -10,6 +10,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:deploy": "prisma migrate deploy",
+    "render:configure": "node scripts/render/configure.js",
     "postinstall": "prisma generate",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

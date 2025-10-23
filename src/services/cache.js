@@ -52,10 +52,15 @@ class CacheService {
   /**
    * Generate cache key from request
    */
-  generateKey(api, endpoint, body) {
+  generateKey({ api, endpoint, payload = {}, userId = 'anonymous', method = 'POST' }) {
+    const base = {
+      method,
+      userId,
+      payload
+    };
     const hash = crypto
       .createHash('md5')
-      .update(JSON.stringify(body))
+      .update(JSON.stringify(base))
       .digest('hex');
     return `cache:${api}:${endpoint}:${hash}`;
   }

@@ -101,18 +101,20 @@ class AnalyticsService {
       }
     } : {};
 
-    // Get raw data grouped by hour
-    const data = await prisma.$queryRaw`
-      SELECT
-        EXTRACT(HOUR FROM "createdAt") as hour,
-        COUNT(*)::int as count
-      FROM "ApiUsage"
-      ${startDate && endDate ? prisma.$queryRaw`WHERE "createdAt" BETWEEN ${startDate} AND ${endDate}` : prisma.$queryRaw``}
-      GROUP BY hour
-      ORDER BY hour
-    `;
+    // Fetch timestamps and group in JS for cross-DB compatibility (SQLite/Postgres)
+    const rows = await prisma.apiUsage.findMany({
+      where,
+      select: { createdAt: true }
+    });
 
-    return data;
+    const counts = new Array(24).fill(0);
+    for (const r of rows) {
+      const d = new Date(r.createdAt);
+      const hour = d.getHours();
+      counts[hour]++;
+    }
+
+    return counts.map((count, hour) => ({ hour, count }));
   }
 
   /**

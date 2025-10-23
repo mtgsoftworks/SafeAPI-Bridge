@@ -11,10 +11,22 @@ const allowedEndpoints = {
 
   gemini: [
     '/models',
+    // Legacy models
     '/models/gemini-pro:generateContent',
     '/models/gemini-pro-vision:generateContent',
     '/models/gemini-1.5-pro:generateContent',
-    '/models/gemini-1.5-flash:generateContent'
+    '/models/gemini-1.5-flash:generateContent',
+    // Latest models (2025)
+    '/models/gemini-2.5-flash:generateContent',
+    '/models/gemini-2.5-pro:generateContent',
+    '/models/gemini-2.5-flash-lite:generateContent',
+    '/models/gemini-2.0-flash:generateContent',
+    '/models/gemini-2.0-flash-001:generateContent',
+    '/models/gemini-2.0-flash-lite:generateContent',
+    '/models/gemini-2.0-flash-lite-001:generateContent',
+    // Embeddings
+    '/models/embedding-001',
+    '/models/text-embedding-004'
   ],
 
   claude: [
@@ -48,7 +60,7 @@ const apiHeaders = {
 
   claude: (apiKey) => ({
     'x-api-key': apiKey,
-    'anthropic-version': '2023-06-01',
+    'anthropic-version': '2025-06-01', // Updated for Claude 4 models (2025)
     'Content-Type': 'application/json'
   }),
 

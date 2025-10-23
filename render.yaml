@@ -34,6 +34,13 @@ services:
           name: safeapi-db
           property: connectionString
 
+      # Use Redis internal URL from Redis service below (if present)
+      - key: REDIS_URL
+        fromService:
+          name: safeapi-redis
+          type: redis
+          property: connectionString
+
       # API Keys (add these manually in Render dashboard or via sync)
       - key: OPENAI_API_KEY
         sync: false
@@ -75,8 +82,8 @@ databases:
     postgresMajorVersion: 15
 
 # Optional: Redis (uncomment if you want Redis caching)
-# - type: redis
-#   name: safeapi-redis
-#   plan: starter # Free tier (30 days)
-#   region: oregon
-#   maxmemoryPolicy: allkeys-lru
+redis:
+  - name: safeapi-redis
+    plan: starter # Free tier (30 days)
+    region: oregon
+    maxmemoryPolicy: allkeys-lru

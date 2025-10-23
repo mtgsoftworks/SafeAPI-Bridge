@@ -378,13 +378,38 @@ safeapi-bridge/
 
 ## 🤖 Supported AI Services
 
-| Service | Models | Status |
+| Service | Latest Models (2025) | Status |
 |---------|--------|--------|
-| **OpenAI** | GPT-4, GPT-3.5, Embeddings | ✅ Supported |
-| **Google Gemini** | Gemini 2.5 Pro/Flash, 2.0 Flash | ✅ Supported |
-| **Anthropic Claude** | Claude 3 Opus/Sonnet/Haiku | ✅ Supported |
-| **Groq** | Llama, Mixtral | ✅ Supported |
-| **Mistral AI** | Mistral models | ✅ Supported |
+| **OpenAI** | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, Embeddings | ✅ Supported |
+| **Google Gemini** | Gemini 2.5 Pro/Flash/Lite, 2.0 Flash/Lite, Embeddings | ✅ Supported |
+| **Anthropic Claude** | Claude Opus 4.1, Sonnet 4.5, Haiku 4.5 | ✅ Supported |
+| **Groq** | Llama 3.3 70B, Llama 3.1 405B, Mixtral 8x7B | ✅ Supported |
+| **Mistral AI** | Mistral Medium 3, Codestral 2, Small 3.1, Magistral | ✅ Supported |
+
+### Model Details
+
+**Google Gemini (2025)**
+- `gemini-2.5-flash` - Latest, fast and efficient
+- `gemini-2.5-pro` - Most capable, best for complex tasks
+- `gemini-2.5-flash-lite` - Lightweight version
+- `gemini-2.0-flash` - Previous generation
+- `text-embedding-004` - Latest embeddings
+
+**Anthropic Claude 4 Series (2025)**
+- `claude-opus-4-1` - Most powerful, 74.5% on SWE-bench ($15/$75 per M tokens)
+- `claude-sonnet-4-5` - Balanced performance ($3/$15 per M tokens)
+- `claude-haiku-4-5` - Fast and cost-effective ($1/$5 per M tokens)
+
+**Groq (2025)**
+- `llama-3.3-70b-versatile` - Latest Meta model, 128K context
+- `llama-3.1-405b-reasoning` - Largest open model
+- `mixtral-8x7b-32768` - Fast Mixtral model
+
+**Mistral AI (2025)**
+- `mistral-medium-3` - Best for coding and STEM
+- `codestral-2` - Specialized code generation
+- `mistral-small-3.1` - Multimodal, 128K context
+- `magistral` - Multi-step reasoning
 
 ---
 

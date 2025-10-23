@@ -44,7 +44,18 @@ router.get('/:api/endpoints', authenticateToken, getAvailableEndpoints);
  *   ... other API-specific parameters
  * }
  */
+// Support both GET and POST for proxy
 router.post(
+  '/:api/proxy',
+  ipCheck,
+  authenticateToken,
+  quotaCheck,
+  cacheMiddleware,
+  validateProxyRequest,
+  asyncHandler(proxyRequest)
+);
+
+router.get(
   '/:api/proxy',
   ipCheck,
   authenticateToken,

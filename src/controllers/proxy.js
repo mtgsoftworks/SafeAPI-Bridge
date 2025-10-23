@@ -20,8 +20,9 @@ const proxyRequest = async (req, res) => {
 
   try {
     const { api } = req.params;
-    const endpoint = req.body.endpoint || req.query.endpoint;
-    const requestData = sanitizeBody(req.body);
+    const isGet = req.method === 'GET';
+    const endpoint = (req.body && req.body.endpoint) || req.query.endpoint;
+    const requestData = sanitizeBody(req.body || {});
 
     // Get user from middleware (set by auth + quota check)
     const userId = req.user.userId;
@@ -72,19 +73,29 @@ const proxyRequest = async (req, res) => {
     // Log the proxied request
     console.log(`🔄 Proxying ${req.method} request to ${api.toUpperCase()}: ${endpoint}`);
 
-    // Make the request to external API
-    const response = await axios({
+    // Prepare axios config
+    const axiosConfig = {
       method: req.method,
       url: targetUrl,
-      data: requestData,
       headers: {
         ...headers,
-        // Forward some client headers
         ...(req.headers['user-agent'] && { 'User-Agent': req.headers['user-agent'] })
       },
-      timeout: 60000, // 60 seconds timeout
-      validateStatus: (status) => status < 600 // Don't throw on 4xx/5xx
-    });
+      timeout: 60000,
+      validateStatus: (status) => status < 600
+    };
+
+    // For GET requests, pass remaining query params through (excluding endpoint)
+    if (isGet) {
+      const { endpoint: _ep, ...queryRest } = req.query || {};
+      // For Gemini, API key already appended; include other query params
+      axiosConfig.params = queryRest;
+    } else {
+      axiosConfig.data = requestData;
+    }
+
+    // Make the request to external API
+    const response = await axios(axiosConfig);
 
     const responseTime = Date.now() - startTime;
     const success = response.status >= 200 && response.status < 400;

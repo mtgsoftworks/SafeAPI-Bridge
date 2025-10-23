@@ -7,7 +7,7 @@
  * Validate API request structure
  */
 const validateProxyRequest = (req, res, next) => {
-  const { body, params } = req;
+  const { body, params, method, query } = req;
   const { api } = params;
 
   // Validate API parameter
@@ -20,7 +20,18 @@ const validateProxyRequest = (req, res, next) => {
     });
   }
 
-  // Validate request body exists
+  // For GET requests, allow empty body but require endpoint in query
+  if (method === 'GET') {
+    if (!query || !query.endpoint) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'For GET requests, endpoint must be provided in query string as ?endpoint=/path'
+      });
+    }
+    return next();
+  }
+
+  // For non-GET, require a body
   if (!body || Object.keys(body).length === 0) {
     return res.status(400).json({
       error: 'Invalid request',

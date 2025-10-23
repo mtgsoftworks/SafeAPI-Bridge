@@ -57,10 +57,6 @@ services:
       - key: MISTRAL_API_KEY
         sync: false
 
-      # Optional Redis URL (if you add Redis service)
-      - key: REDIS_URL
-        sync: false
-
       # CORS
       - key: ALLOWED_ORIGINS
         value: "*" # Change to your domain in production
@@ -72,6 +68,13 @@ services:
       - key: RATE_LIMIT_WINDOW_MS
         value: 3600000
 
+  # Redis Service
+  - type: redis
+    name: safeapi-redis
+    plan: starter # Free tier (30 days)
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+
 # Database - PostgreSQL
 databases:
   - name: safeapi-db
@@ -80,10 +83,3 @@ databases:
     plan: starter # Free tier (90 days)
     region: oregon
     postgresMajorVersion: 15
-
-# Optional: Redis (uncomment if you want Redis caching)
-redis:
-  - name: safeapi-redis
-    plan: starter # Free tier (30 days)
-    region: oregon
-    maxmemoryPolicy: allkeys-lru

@@ -83,6 +83,6 @@ databases:
   - name: safeapi-db
     databaseName: safeapi_bridge
     user: safeapi_user
-    plan: starter # Free tier (90 days)
+    plan: standard # Paid plan (legacy 'starter' removed)
     region: oregon
     postgresMajorVersion: 15

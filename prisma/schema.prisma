@@ -150,3 +150,29 @@ model Admin {
 
   @@index([username])
 }
+
+// Audit Log (admin operations tracking)
+model AuditLog {
+  id          String   @id @default(uuid())
+
+  // Action details
+  action      String   // e.g., "user.create", "webhook.delete", "ip_rule.add"
+  adminKey    String   // Hashed admin key (for privacy)
+
+  // Request details
+  ipAddress   String
+  userAgent   String?
+
+  // Additional data (JSON string)
+  details     String?  // JSON-encoded details
+
+  // Status
+  success     Boolean  @default(true)
+
+  // Timestamp
+  createdAt   DateTime @default(now())
+
+  @@index([action])
+  @@index([adminKey])
+  @@index([createdAt])
+}

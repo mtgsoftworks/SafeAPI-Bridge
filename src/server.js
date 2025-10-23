@@ -7,6 +7,7 @@ const corsConfig = require('./middleware/corsConfig');
 const logger = require('./middleware/logger');
 const { limiter } = require('./middleware/rateLimiter');
 const { errorMiddleware, notFoundHandler } = require('./utils/errorHandler');
+const { securityMonitor } = require('./middleware/securityMonitor');
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -36,6 +37,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Logging
 app.use(logger);
+
+// Security monitoring (detects suspicious patterns)
+app.use(securityMonitor);
 
 // Rate limiting (global)
 app.use(limiter);

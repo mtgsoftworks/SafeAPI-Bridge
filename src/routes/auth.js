@@ -94,4 +94,79 @@ router.get('/verify', require('../middleware/auth').authenticateToken, (req, res
   });
 });
 
+/**
+ * POST /auth/logout
+ * Logout current user by blacklisting their token
+ * Requires authentication
+ */
+router.post('/logout', require('../middleware/auth').authenticateToken, async (req, res) => {
+  try {
+    const { token } = req;
+    const { userId } = req.user;
+    const ip = req.clientIp || req.ip || req.headers['x-forwarded-for'] || 'unknown';
+
+    // Add token to blacklist
+    const tokenBlacklist = require('../services/tokenBlacklist');
+    const success = await tokenBlacklist.addToBlacklist(token, userId, ip);
+
+    if (success) {
+      res.json({
+        success: true,
+        message: 'Logged out successfully. Token has been revoked.',
+        userId
+      });
+    } else {
+      res.status(500).json({
+        error: 'Logout Failed',
+        message: 'Failed to revoke token. Please try again.'
+      });
+    }
+
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({
+      error: 'Logout Failed',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /auth/token-info
+ * Get information about the current token
+ * Useful for debugging and monitoring
+ */
+router.get('/token-info', require('../middleware/auth').authenticateToken, async (req, res) => {
+  try {
+    const { token } = req;
+    const jwt = require('jsonwebtoken');
+
+    // Decode token (already verified by middleware)
+    const decoded = jwt.decode(token);
+
+    const tokenBlacklist = require('../services/tokenBlacklist');
+    const blacklistInfo = await tokenBlacklist.getBlacklistInfo(token);
+
+    const now = Math.floor(Date.now() / 1000);
+    const expiresIn = decoded.exp - now;
+
+    res.json({
+      user: req.user,
+      issuedAt: new Date(decoded.iat * 1000).toISOString(),
+      expiresAt: new Date(decoded.exp * 1000).toISOString(),
+      expiresInSeconds: expiresIn,
+      expiresInHours: (expiresIn / 3600).toFixed(2),
+      isBlacklisted: !!blacklistInfo,
+      blacklistInfo
+    });
+
+  } catch (error) {
+    console.error('Token info error:', error);
+    res.status(500).json({
+      error: 'Failed to get token info',
+      message: error.message
+    });
+  }
+});
+
 module.exports = router;

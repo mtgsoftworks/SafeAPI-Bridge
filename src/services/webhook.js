@@ -1,9 +1,12 @@
 const axios = require('axios');
 const prisma = require('../db/client');
+const { validateURL } = require('../utils/urlValidator');
+const { logSSRFAttempt } = require('../utils/securityLogger');
 
 /**
  * Webhook Service
  * Handles webhook notifications for various events
+ * Now with SSRF protection
  */
 
 class WebhookService {
@@ -40,9 +43,25 @@ class WebhookService {
 
   /**
    * Send individual webhook with retry logic
+   * Now with SSRF validation on every send
    */
   static async sendWebhook(webhook, eventType, data, retryCount = 0) {
     try {
+      // Double-check URL for SSRF protection (defense in depth)
+      const urlValidation = validateURL(webhook.url, 'webhook-service');
+      if (!urlValidation.valid) {
+        logSSRFAttempt(webhook.url, 'webhook-service', `SSRF attempt in webhook send: ${urlValidation.error}`);
+        console.error(`🚫 SSRF protection blocked webhook URL: ${webhook.url}`);
+
+        // Deactivate malicious webhook
+        await prisma.webhook.update({
+          where: { id: webhook.id },
+          data: { active: false }
+        });
+
+        throw new Error(`SSRF protection: ${urlValidation.error}`);
+      }
+
       const payload = {
         event: eventType,
         timestamp: new Date().toISOString(),
@@ -70,7 +89,8 @@ class WebhookService {
 
       const response = await axios.post(webhook.url, payload, {
         headers,
-        timeout: webhook.timeout || 5000
+        timeout: webhook.timeout || 5000,
+        maxRedirects: 0 // Prevent redirect-based SSRF
       });
 
       // Update stats

@@ -196,9 +196,10 @@ const getAvailableEndpoints = (req, res) => {
   const apiConfig = config[api];
   const isConfigured = apiConfig && apiConfig.apiKey;
 
+  // Never leak API keys: ensure boolean for configured
   res.json({
     api: api.toUpperCase(),
-    configured: isConfigured,
+    configured: Boolean(isConfigured),
     baseUrl: apiConfig?.baseUrl || 'Not configured',
     allowedEndpoints: allowedEndpoints[api],
     message: isConfigured

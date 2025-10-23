@@ -20,7 +20,15 @@
       "Bash(npx prisma db push:*)",
       "Bash(timeout:*)",
       "Bash(cat:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(tree:*)",
+      "Bash(dir /s \"C:\\Users\\mtg\\Desktop\\API‑Key‑Proxy‑Server\")",
+      "Bash(node scripts/remote/test-gemini.js:*)",
+      "Bash(node scripts/remote/test-security.js:*)",
+      "Bash(node scripts/remote/test-api-leak.js:*)",
+      "Bash(find:*)",
+      "Bash(npm audit:*)",
+      "Bash(ping:*)"
     ],
     "deny": [],
     "ask": []

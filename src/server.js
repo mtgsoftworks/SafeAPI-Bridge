@@ -8,6 +8,8 @@ const logger = require('./middleware/logger');
 const { limiter } = require('./middleware/rateLimiter');
 const { errorMiddleware, notFoundHandler } = require('./utils/errorHandler');
 const { securityMonitor } = require('./middleware/securityMonitor');
+const httpsEnforcement = require('./middleware/httpsEnforcement');
+const requestTimeout = require('./middleware/requestTimeout');
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -25,15 +27,28 @@ app.set('trust proxy', 1);
 // Remove X-Powered-By header
 app.disable('x-powered-by');
 
-// Security middleware
-app.use(helmet());
+// Security middleware with HSTS
+app.use(helmet({
+  hsts: {
+    maxAge: 31536000, // 1 year in seconds
+    includeSubDomains: true,
+    preload: true
+  },
+  contentSecurityPolicy: false // Allow external API calls
+}));
+
+// HTTPS enforcement (production only)
+app.use(httpsEnforcement);
 
 // CORS
 app.use(corsConfig);
 
-// Body parser
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Body parser with reduced limit for security
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// Request timeout protection
+app.use(requestTimeout);
 
 // Logging
 app.use(logger);
@@ -68,9 +83,9 @@ app.use(notFoundHandler);
 // Error handling middleware (must be last)
 app.use(errorMiddleware);
 
-// Start server
+// Start server with keep-alive configuration
 const PORT = config.port;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log('\n' + '='.repeat(50));
   console.log('🚀 SafeAPI-Bridge Started');
   console.log('='.repeat(50));
@@ -96,18 +111,115 @@ app.listen(PORT, () => {
   console.log('\n⚙️  Configuration:');
   console.log(`  - Rate Limit: ${config.rateLimiting.maxRequests} requests per ${config.rateLimiting.windowMs / 1000 / 60} minutes`);
   console.log(`  - JWT Expiry: ${config.jwtExpiresIn}`);
+  console.log(`  - Request Timeout: ${process.env.REQUEST_TIMEOUT_MS || 30000}ms`);
+  console.log(`  - Body Size Limit: 2MB`);
   console.log('='.repeat(50) + '\n');
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('⚠️  SIGTERM received. Shutting down gracefully...');
-  process.exit(0);
+// Configure HTTP keep-alive for better connection reuse
+server.keepAliveTimeout = 65000; // 65 seconds (must be higher than load balancer timeout)
+server.headersTimeout = 66000; // Slightly higher than keepAliveTimeout
+
+// Memory monitoring (log every 5 minutes in production)
+if (config.nodeEnv === 'production') {
+  const memoryMonitor = setInterval(() => {
+    const usage = process.memoryUsage();
+    console.log('📊 Memory Usage:', {
+      rss: `${Math.round(usage.rss / 1024 / 1024)}MB`,
+      heapUsed: `${Math.round(usage.heapUsed / 1024 / 1024)}MB`,
+      heapTotal: `${Math.round(usage.heapTotal / 1024 / 1024)}MB`,
+      external: `${Math.round(usage.external / 1024 / 1024)}MB`
+    });
+  }, 5 * 60 * 1000); // Every 5 minutes
+
+  // Clear interval on shutdown
+  process.on('beforeExit', () => clearInterval(memoryMonitor));
+}
+
+/**
+ * Graceful shutdown handler
+ * Ensures clean shutdown of all resources
+ */
+let isShuttingDown = false;
+
+const gracefulShutdown = async (signal) => {
+  if (isShuttingDown) {
+    console.log('⚠️  Shutdown already in progress...');
+    return;
+  }
+
+  isShuttingDown = true;
+  console.log(`\n⚠️  ${signal} received. Starting graceful shutdown...`);
+
+  // Stop accepting new connections
+  server.close(async () => {
+    console.log('✅ Server stopped accepting new connections');
+
+    try {
+      // Close database connections
+      const prisma = require('./db/client');
+      await prisma.$disconnect();
+      console.log('✅ Database connections closed');
+
+      // Close Redis connections
+      const redisClient = require('./db/redis');
+      await redisClient.closeRedis();
+      console.log('✅ Redis connections closed');
+
+      console.log('✅ Graceful shutdown complete');
+      process.exit(0);
+    } catch (error) {
+      console.error('❌ Error during shutdown:', error);
+      process.exit(1);
+    }
+  });
+
+  // Force shutdown after 15 seconds if graceful shutdown fails
+  setTimeout(() => {
+    console.error('❌ Graceful shutdown timeout. Forcing exit...');
+    process.exit(1);
+  }, 15000);
+};
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+/**
+ * Uncaught exception handler
+ * Logs error and attempts graceful shutdown
+ */
+process.on('uncaughtException', (error) => {
+  console.error('❌ UNCAUGHT EXCEPTION:', error);
+  console.error('Stack:', error.stack);
+
+  const { logger } = require('./utils/securityLogger');
+  logger.error('Uncaught Exception', {
+    error: error.message,
+    stack: error.stack,
+    type: 'uncaughtException'
+  });
+
+  // Attempt graceful shutdown
+  gracefulShutdown('uncaughtException');
 });
 
-process.on('SIGINT', () => {
-  console.log('\n⚠️  SIGINT received. Shutting down gracefully...');
-  process.exit(0);
+/**
+ * Unhandled promise rejection handler
+ * Logs error and attempts graceful shutdown
+ */
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ UNHANDLED REJECTION at:', promise, 'reason:', reason);
+
+  const { logger } = require('./utils/securityLogger');
+  logger.error('Unhandled Promise Rejection', {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+    type: 'unhandledRejection'
+  });
+
+  // Attempt graceful shutdown
+  gracefulShutdown('unhandledRejection');
 });
 
 module.exports = app;

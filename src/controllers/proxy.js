@@ -209,9 +209,10 @@ const getAvailableEndpoints = (req, res) => {
 };
 
 /**
- * Health check for all configured APIs
+ * Health check for all configured APIs + infrastructure
+ * Tests database and Redis connectivity
  */
-const healthCheck = (req, res) => {
+const healthCheck = async (req, res) => {
   const apis = ['openai', 'gemini', 'claude', 'groq', 'mistral'];
   const status = {};
 
@@ -225,10 +226,57 @@ const healthCheck = (req, res) => {
 
   const configuredCount = Object.values(status).filter(s => s.configured).length;
 
-  res.json({
-    status: 'healthy',
+  // Test database connectivity
+  let dbStatus = 'unknown';
+  let dbLatency = 0;
+  try {
+    const prisma = require('../db/client');
+    const start = Date.now();
+    await prisma.$queryRaw`SELECT 1`;
+    dbLatency = Date.now() - start;
+    dbStatus = 'connected';
+  } catch (error) {
+    dbStatus = 'error';
+    console.error('Database health check failed:', error.message);
+  }
+
+  // Test Redis connectivity
+  let redisStatus = 'unknown';
+  let redisLatency = 0;
+  try {
+    const redisClient = require('../db/redis');
+    if (redisClient.isRedisAvailable()) {
+      const start = Date.now();
+      await redisClient.set('health_check', 'ok', 10);
+      const value = await redisClient.get('health_check');
+      redisLatency = Date.now() - start;
+      redisStatus = value === 'ok' ? 'connected' : 'error';
+    } else {
+      redisStatus = 'fallback_memory';
+    }
+  } catch (error) {
+    redisStatus = 'error';
+    console.error('Redis health check failed:', error.message);
+  }
+
+  // Overall health status
+  const isHealthy = dbStatus === 'connected';
+  const overallStatus = isHealthy ? 'healthy' : 'degraded';
+
+  res.status(isHealthy ? 200 : 503).json({
+    status: overallStatus,
     timestamp: new Date().toISOString(),
     apis: status,
+    infrastructure: {
+      database: {
+        status: dbStatus,
+        latency: `${dbLatency}ms`
+      },
+      redis: {
+        status: redisStatus,
+        latency: redisStatus === 'connected' ? `${redisLatency}ms` : 'N/A'
+      }
+    },
     summary: `${configuredCount}/${apis.length} APIs configured`
   });
 };

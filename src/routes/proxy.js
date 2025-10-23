@@ -5,7 +5,6 @@ const { validateProxyRequest } = require('../utils/validator');
 const { proxyRequest, getAvailableEndpoints } = require('../controllers/proxy');
 const { asyncHandler } = require('../utils/errorHandler');
 const quotaCheck = require('../middleware/quotaCheck');
-const cacheMiddleware = require('../middleware/cacheMiddleware');
 const ipCheck = require('../middleware/ipCheck');
 
 /**
@@ -29,9 +28,8 @@ router.get('/:api/endpoints', authenticateToken, getAvailableEndpoints);
  * 1. ipCheck - Verify IP is allowed
  * 2. authenticateToken - Verify JWT
  * 3. quotaCheck - Check user quota
- * 4. cacheMiddleware - Check cache
- * 5. validateProxyRequest - Validate request
- * 6. proxyRequest - Forward to API
+ * 4. validateProxyRequest - Validate request
+ * 5. proxyRequest - Forward to API
  *
  * Params:
  *   api: openai | gemini | claude | groq | mistral
@@ -50,7 +48,6 @@ router.post(
   ipCheck,
   authenticateToken,
   quotaCheck,
-  cacheMiddleware,
   validateProxyRequest,
   asyncHandler(proxyRequest)
 );
@@ -60,7 +57,6 @@ router.get(
   ipCheck,
   authenticateToken,
   quotaCheck,
-  cacheMiddleware,
   validateProxyRequest,
   asyncHandler(proxyRequest)
 );
@@ -71,31 +67,31 @@ router.get(
  */
 
 // OpenAI
-router.post('/openai', ipCheck, authenticateToken, quotaCheck, cacheMiddleware, (req, res, next) => {
+router.post('/openai', ipCheck, authenticateToken, quotaCheck, (req, res, next) => {
   req.params.api = 'openai';
   next();
 }, validateProxyRequest, asyncHandler(proxyRequest));
 
 // Gemini
-router.post('/gemini', ipCheck, authenticateToken, quotaCheck, cacheMiddleware, (req, res, next) => {
+router.post('/gemini', ipCheck, authenticateToken, quotaCheck, (req, res, next) => {
   req.params.api = 'gemini';
   next();
 }, validateProxyRequest, asyncHandler(proxyRequest));
 
 // Claude
-router.post('/claude', ipCheck, authenticateToken, quotaCheck, cacheMiddleware, (req, res, next) => {
+router.post('/claude', ipCheck, authenticateToken, quotaCheck, (req, res, next) => {
   req.params.api = 'claude';
   next();
 }, validateProxyRequest, asyncHandler(proxyRequest));
 
 // Groq
-router.post('/groq', ipCheck, authenticateToken, quotaCheck, cacheMiddleware, (req, res, next) => {
+router.post('/groq', ipCheck, authenticateToken, quotaCheck, (req, res, next) => {
   req.params.api = 'groq';
   next();
 }, validateProxyRequest, asyncHandler(proxyRequest));
 
 // Mistral
-router.post('/mistral', ipCheck, authenticateToken, quotaCheck, cacheMiddleware, (req, res, next) => {
+router.post('/mistral', ipCheck, authenticateToken, quotaCheck, (req, res, next) => {
   req.params.api = 'mistral';
   next();
 }, validateProxyRequest, asyncHandler(proxyRequest));

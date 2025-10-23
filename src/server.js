@@ -40,7 +40,7 @@ app.use(limiter);
 // Health check endpoint (no auth required)
 app.get('/', (req, res) => {
   res.json({
-    service: 'API Key Proxy Server',
+    service: 'SafeAPI-Bridge',
     status: 'running',
     version: '1.0.0',
     message: 'Server is healthy. Use /health for detailed status.'
@@ -65,7 +65,7 @@ app.use(errorMiddleware);
 const PORT = config.port;
 app.listen(PORT, () => {
   console.log('\n' + '='.repeat(50));
-  console.log('🚀 API Key Proxy Server Started');
+  console.log('🚀 SafeAPI-Bridge Started');
   console.log('='.repeat(50));
   console.log(`📡 Server running on port: ${PORT}`);
   console.log(`🌍 Environment: ${config.nodeEnv}`);

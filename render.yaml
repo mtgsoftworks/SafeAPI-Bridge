@@ -8,7 +8,7 @@ services:
     env: node
     region: oregon # or any other region
     plan: starter # Free tier
-    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy
+    buildCommand: npm install && npx prisma generate && npx prisma db push
     startCommand: npm start
     healthCheckPath: /health
 
@@ -30,9 +30,7 @@ services:
         generateValue: true # Auto-generate admin key
 
       - key: DATABASE_URL
-        fromDatabase:
-          name: safeapi-db
-          property: connectionString
+        value: "file:./dev.db"
 
       # Use Redis internal URL from Redis service below (if present)
       - key: REDIS_URL
@@ -78,11 +76,4 @@ services:
       - source: 0.0.0.0/0
         description: everywhere
 
-# Database - PostgreSQL
-databases:
-  - name: safeapi-db
-    databaseName: safeapi_bridge
-    user: safeapi_user
-    plan: standard # Paid plan (legacy 'starter' removed)
-    region: oregon
-    postgresMajorVersion: 15
+# Removed external Postgres; using SQLite file DB

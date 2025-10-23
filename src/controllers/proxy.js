@@ -3,20 +3,28 @@ const config = require('../config/env');
 const { isEndpointAllowed, apiHeaders } = require('../config/apis');
 const { handleProxyError } = require('../utils/errorHandler');
 const { validateEndpoint, sanitizeBody } = require('../utils/validator');
+const UsageTrackingService = require('../services/usage');
+const webhookService = require('../services/webhook');
 
 /**
  * Main Proxy Controller
  * Forwards requests to external AI APIs while hiding API keys
+ * Now with usage tracking and analytics
  */
 
 /**
  * Forward request to the target API
  */
 const proxyRequest = async (req, res) => {
+  const startTime = Date.now();
+
   try {
     const { api } = req.params;
     const endpoint = req.body.endpoint || req.query.endpoint;
     const requestData = sanitizeBody(req.body);
+
+    // Get user from middleware (set by auth + quota check)
+    const userId = req.user.userId;
 
     // Remove endpoint from body if it exists
     delete requestData.endpoint;
@@ -78,11 +86,52 @@ const proxyRequest = async (req, res) => {
       validateStatus: (status) => status < 600 // Don't throw on 4xx/5xx
     });
 
+    const responseTime = Date.now() - startTime;
+    const success = response.status >= 200 && response.status < 400;
+
+    // Track usage (async, don't wait)
+    UsageTrackingService.trackRequest({
+      userId,
+      api,
+      endpoint,
+      method: req.method,
+      statusCode: response.status,
+      success,
+      responseTime,
+      req,
+      responseData: response.data
+    }).catch(err => console.error('Usage tracking error:', err));
+
     // Forward the response
     res.status(response.status).json(response.data);
 
   } catch (error) {
+    const responseTime = Date.now() - startTime;
     const errorResponse = handleProxyError(error, req.params.api);
+
+    // Track failed request
+    if (req.user && req.user.userId) {
+      UsageTrackingService.trackRequest({
+        userId: req.user.userId,
+        api: req.params.api,
+        endpoint: req.body.endpoint || req.query.endpoint || '/unknown',
+        method: req.method,
+        statusCode: errorResponse.status,
+        success: false,
+        responseTime,
+        req
+      }).catch(err => console.error('Usage tracking error:', err));
+
+      // Trigger error webhook
+      webhookService.trigger('api.error', {
+        userId: req.user.userId,
+        api: req.params.api,
+        endpoint: req.body.endpoint,
+        error: errorResponse.message,
+        statusCode: errorResponse.status
+      }).catch(err => console.error('Webhook error:', err));
+    }
+
     res.status(errorResponse.status).json(errorResponse);
   }
 };

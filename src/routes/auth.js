@@ -3,15 +3,18 @@ const router = express.Router();
 const { generateToken } = require('../middleware/auth');
 const { validateAuthRequest } = require('../utils/validator');
 const { authLimiter } = require('../middleware/rateLimiter');
+const UserModel = require('../models/User');
+const webhookService = require('../services/webhook');
 
 /**
  * Authentication Routes
- * Generates JWT tokens for Android app
+ * Generates JWT tokens for Android app with auto user creation
  */
 
 /**
  * POST /auth/token
  * Generate a new JWT token for the client
+ * Automatically creates user if doesn't exist
  *
  * Body:
  * {
@@ -19,9 +22,29 @@ const { authLimiter } = require('../middleware/rateLimiter');
  *   "appId": "android-app-id"
  * }
  */
-router.post('/token', authLimiter, validateAuthRequest, (req, res) => {
+router.post('/token', authLimiter, validateAuthRequest, async (req, res) => {
   try {
     const { userId, appId } = req.body;
+
+    // Find or create user (auto user creation)
+    const user = await UserModel.findOrCreate({ userId, appId });
+
+    // Check if this is a new user
+    const isNewUser = user.createdAt.getTime() > Date.now() - 1000; // Created in last second
+
+    // Trigger webhook for new user
+    if (isNewUser) {
+      await webhookService.trigger('user.created', {
+        userId: user.userId,
+        appId: user.appId,
+        apiKey: user.apiKey,
+        quotas: {
+          daily: user.dailyQuota,
+          monthly: user.monthlyQuota
+        },
+        createdAt: user.createdAt
+      });
+    }
 
     // Create token payload
     const payload = {
@@ -36,9 +59,20 @@ router.post('/token', authLimiter, validateAuthRequest, (req, res) => {
     res.json({
       success: true,
       token,
+      apiKey: user.apiKey, // Return API key for reference
       expiresIn: '7 days',
       tokenType: 'Bearer',
-      message: 'Token generated successfully. Use this token in Authorization header as: Bearer <token>'
+      user: {
+        userId: user.userId,
+        appId: user.appId,
+        dailyQuota: user.dailyQuota,
+        monthlyQuota: user.monthlyQuota,
+        requestsToday: user.requestsToday,
+        requestsMonth: user.requestsMonth
+      },
+      message: isNewUser
+        ? 'New user created and token generated successfully'
+        : 'Token generated successfully. Use this token in Authorization header as: Bearer <token>'
     });
 
   } catch (error) {

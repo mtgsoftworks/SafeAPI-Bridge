@@ -11,6 +11,8 @@ const { errorMiddleware, notFoundHandler } = require('./utils/errorHandler');
 // Routes
 const authRoutes = require('./routes/auth');
 const proxyRoutes = require('./routes/proxy');
+const adminRoutes = require('./routes/admin');
+const analyticsRoutes = require('./routes/analytics');
 const { healthCheck } = require('./controllers/proxy');
 
 // Initialize Express app
@@ -50,6 +52,8 @@ app.get('/health', healthCheck);
 // Routes
 app.use('/auth', authRoutes);
 app.use('/api', proxyRoutes);
+app.use('/admin', adminRoutes);
+app.use('/analytics', analyticsRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
@@ -70,10 +74,12 @@ app.listen(PORT, () => {
   console.log('\n📋 Available Endpoints:');
   console.log('  GET  /           - Service info');
   console.log('  GET  /health     - Health check');
-  console.log('  POST /auth/token - Generate JWT token');
+  console.log('  POST /auth/token - Generate JWT token (auto-creates user)');
   console.log('  GET  /auth/verify - Verify JWT token');
   console.log('  POST /api/:api/proxy - Proxy to AI API');
   console.log('  GET  /api/:api/endpoints - Get allowed endpoints');
+  console.log('  GET  /analytics/* - Usage analytics');
+  console.log('  * /admin/* - Admin panel (requires X-Admin-Key)');
   console.log('\n🤖 Supported APIs:');
   console.log(`  - OpenAI: ${config.openai.apiKey ? '✅ Configured' : '❌ Not configured'}`);
   console.log(`  - Gemini: ${config.gemini.apiKey ? '✅ Configured' : '❌ Not configured'}`);

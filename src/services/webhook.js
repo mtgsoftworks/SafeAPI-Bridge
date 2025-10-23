@@ -13,11 +13,12 @@ class WebhookService {
   static async trigger(eventType, data) {
     try {
       // Get all active webhooks for this event
+      // SQLite uses comma-separated string for events
       const webhooks = await prisma.webhook.findMany({
         where: {
           active: true,
           events: {
-            has: eventType
+            contains: eventType  // SQLite-compatible: checks if string contains eventType
           }
         }
       });
@@ -48,11 +49,23 @@ class WebhookService {
         data
       };
 
+      // Parse headers if it's a JSON string (SQLite stores as string)
+      let parsedHeaders = {};
+      if (webhook.headers) {
+        try {
+          parsedHeaders = typeof webhook.headers === 'string'
+            ? JSON.parse(webhook.headers)
+            : webhook.headers;
+        } catch (e) {
+          console.warn('Failed to parse webhook headers:', e);
+        }
+      }
+
       const headers = {
         'Content-Type': 'application/json',
         'User-Agent': 'SafeAPI-Bridge-Webhook/1.0',
         ...(webhook.secret && { 'X-Webhook-Secret': webhook.secret }),
-        ...(webhook.headers && typeof webhook.headers === 'object' ? webhook.headers : {})
+        ...parsedHeaders
       };
 
       const response = await axios.post(webhook.url, payload, {

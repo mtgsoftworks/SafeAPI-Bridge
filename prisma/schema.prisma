@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -45,9 +45,9 @@ model User {
 model ApiUsage {
   id            String   @id @default(uuid())
 
-  // User reference
+  // User reference (stores User.userId, not User.id)
   userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   // Request details
   api           String   // openai, gemini, claude, etc.
@@ -104,11 +104,11 @@ model Webhook {
 
   // Webhook configuration
   url         String
-  events      String[] // ['user.created', 'user.rate_limited', 'api.error', 'usage.high']
+  events      String   // Comma-separated: 'user.created,user.rate_limited,api.error,usage.high'
 
   // Authentication (optional)
   secret      String?
-  headers     Json?    // Additional headers to send
+  headers     String?  // JSON string of additional headers
 
   // Status
   active      Boolean  @default(true)

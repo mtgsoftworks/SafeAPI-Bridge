@@ -5,6 +5,7 @@ yarn.lock
 
 # Environment variables
 .env
+.env.database
 
 # Logs
 logs/
@@ -33,3 +34,8 @@ pids/
 # Testing
 coverage/
 .nyc_output/
+
+# Database
+*.db
+*.db-journal
+prisma/migrations/

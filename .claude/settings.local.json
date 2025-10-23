@@ -13,7 +13,13 @@
       "Bash(git commit:*)",
       "Bash(git branch:*)",
       "Bash(git remote add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npx prisma migrate:*)",
+      "Bash(del dev.db)",
+      "Bash(del /s /q prismamigrations*)",
+      "Bash(npx prisma db push:*)",
+      "Bash(timeout:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

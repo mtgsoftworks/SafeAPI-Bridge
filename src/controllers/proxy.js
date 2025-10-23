@@ -73,6 +73,10 @@ const proxyRequest = async (req, res) => {
     // Log the proxied request
     console.log(`🔄 Proxying ${req.method} request to ${api.toUpperCase()}: ${endpoint}`);
 
+    // Determine streaming
+    const acceptHeader = req.headers['accept'] || '';
+    const wantsStream = acceptHeader.includes('text/event-stream') || requestData.stream === true;
+
     // Prepare axios config
     const axiosConfig = {
       method: req.method,
@@ -82,7 +86,8 @@ const proxyRequest = async (req, res) => {
         ...(req.headers['user-agent'] && { 'User-Agent': req.headers['user-agent'] })
       },
       timeout: 60000,
-      validateStatus: (status) => status < 600
+      validateStatus: (status) => status < 600,
+      ...(wantsStream && { responseType: 'stream' })
     };
 
     // For GET requests, pass remaining query params through (excluding endpoint)
@@ -100,21 +105,47 @@ const proxyRequest = async (req, res) => {
     const responseTime = Date.now() - startTime;
     const success = response.status >= 200 && response.status < 400;
 
-    // Track usage (async, don't wait)
-    UsageTrackingService.trackRequest({
-      userId,
-      api,
-      endpoint,
-      method: req.method,
-      statusCode: response.status,
-      success,
-      responseTime,
-      req,
-      responseData: response.data
-    }).catch(err => console.error('Usage tracking error:', err));
+    if (wantsStream && response.data && typeof response.data.pipe === 'function') {
+      // Forward streaming response
+      res.status(response.status);
+      // Ensure SSE headers if upstream didn't set properly
+      if (!res.getHeader('Content-Type')) {
+        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
 
-    // Forward the response
-    res.status(response.status).json(response.data);
+      // Track usage without tokens (unknown for stream)
+      UsageTrackingService.trackRequest({
+        userId,
+        api,
+        endpoint,
+        method: req.method,
+        statusCode: response.status,
+        success,
+        responseTime,
+        req,
+        responseData: null
+      }).catch(err => console.error('Usage tracking error:', err));
+
+      response.data.pipe(res);
+    } else {
+      // Track usage (async, don't wait)
+      UsageTrackingService.trackRequest({
+        userId,
+        api,
+        endpoint,
+        method: req.method,
+        statusCode: response.status,
+        success,
+        responseTime,
+        req,
+        responseData: response.data
+      }).catch(err => console.error('Usage tracking error:', err));
+
+      // Forward the response
+      res.status(response.status).json(response.data);
+    }
 
   } catch (error) {
     const responseTime = Date.now() - startTime;

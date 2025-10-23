@@ -21,6 +21,9 @@ const app = express();
 // Trust proxy (important for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
 
+// Remove X-Powered-By header
+app.disable('x-powered-by');
+
 // Security middleware
 app.use(helmet());
 

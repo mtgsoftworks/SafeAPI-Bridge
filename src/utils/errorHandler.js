@@ -44,6 +44,15 @@ const handleProxyError = (error, api) => {
 const errorMiddleware = (err, req, res, next) => {
   console.error('Error:', err);
 
+  // Handle CORS rejections explicitly with 403 JSON
+  if (err && err.message === 'Not allowed by CORS') {
+    return res.status(403).json({
+      error: 'CORS Forbidden',
+      message: 'Origin is not allowed by CORS policy',
+      origin: req.headers.origin || null
+    });
+  }
+
   // Default error response
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';

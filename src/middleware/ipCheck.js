@@ -7,14 +7,25 @@ const IpRuleModel = require('../models/IpRule');
 
 const ipCheck = async (req, res, next) => {
   try {
-    // Get client IP
-    const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'];
+    // Prefer Express-calculated IP (respects trust proxy)
+    const xff = req.headers['x-forwarded-for'];
+    const forwardedIp = Array.isArray(xff)
+      ? xff[0]
+      : (typeof xff === 'string' ? xff.split(',')[0].trim() : null);
+    const rawIp = req.ip || forwardedIp || req.socket?.remoteAddress || req.connection?.remoteAddress || '';
 
     // Clean IP (remove ::ffff: prefix for IPv4)
-    const cleanIp = clientIp.replace('::ffff:', '');
+    const cleanIp = (rawIp || '').replace('::ffff:', '');
+
+    if (!cleanIp) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Unable to determine client IP'
+      });
+    }
 
     // Check if IP is allowed
-    const { allowed, reason, rule } = await IpRuleModel.isAllowed(cleanIp);
+    const { allowed, reason } = await IpRuleModel.isAllowed(cleanIp);
 
     if (!allowed) {
       return res.status(403).json({
@@ -30,8 +41,11 @@ const ipCheck = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('IP check error:', error);
-    // On error, allow by default (fail-open)
-    next();
+    // Fail-closed on error for stricter security
+    return res.status(503).json({
+      error: 'Service Unavailable',
+      message: 'IP verification failed. Please try again later.'
+    });
   }
 };
 

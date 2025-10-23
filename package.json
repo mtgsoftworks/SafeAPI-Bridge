@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "reset:daily": "node scripts/scheduler/reset-quotas.js --daily",
+    "reset:monthly": "node scripts/scheduler/reset-quotas.js --monthly",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -39,6 +41,9 @@
     "ioredis": "^5.3.2",
     "node-cache": "^5.1.2",
     "crypto-js": "^4.2.0"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",

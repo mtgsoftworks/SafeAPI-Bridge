@@ -46,7 +46,12 @@ const config = {
 
   // CORS
   allowedOrigins: process.env.ALLOWED_ORIGINS
-    ? (process.env.ALLOWED_ORIGINS === 'none' ? [] : process.env.ALLOWED_ORIGINS.split(','))
+    ? (process.env.ALLOWED_ORIGINS === 'none'
+        ? []
+        : process.env.ALLOWED_ORIGINS
+            .split(',')
+            .map(o => o.trim())
+            .filter(Boolean))
     : (process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3000']),
 
   // Mobile allowances (no Origin header from native apps)

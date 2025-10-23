@@ -129,6 +129,11 @@ npm start
 
 Server will start on `http://localhost:3000` 🎉
 
+Security notes:
+- Analytics endpoints (`/analytics/overview`, `/analytics/costs`, `/analytics/errors`) require `X-Admin-Key` header equal to your `ADMIN_API_KEY`.
+- Do not expose `ADMIN_API_KEY` in client apps. Keep it server-side only.
+- IP rules, rate limiting, and endpoint whitelisting are enabled by default.
+
 ---
 
 ## 📖 API Usage
@@ -190,6 +195,42 @@ Content-Type: application/json
 }
 ```
 
+#### Streaming (OpenAI/Claude)
+- To receive server-sent events (SSE) streams, set `stream: true` in body and include `Accept: text/event-stream` header.
+- Example (OpenAI):
+```bash
+POST http://localhost:3000/api/openai/proxy
+Authorization: Bearer YOUR_JWT_TOKEN
+Accept: text/event-stream
+Content-Type: application/json
+
+{
+  "endpoint": "/chat/completions",
+  "model": "gpt-4o-mini",
+  "stream": true,
+  "messages": [{"role":"user","content":"Hello!"}]
+}
+```
+
+#### Streaming (Claude)
+- SSE için `Accept: text/event-stream` ve body’de `stream: true` gönderin.
+```bash
+POST http://localhost:3000/api/claude/proxy
+Authorization: Bearer YOUR_JWT_TOKEN
+Accept: text/event-stream
+Content-Type: application/json
+
+{
+  "endpoint": "/messages",
+  "stream": true,
+  "max_tokens": 512,
+  "model": "claude-3-5-sonnet-latest",
+  "messages": [
+    {"role": "user", "content": "Merhaba!"}
+  ]
+}
+```
+
 #### Anthropic Claude
 ```bash
 POST http://localhost:3000/api/claude/proxy
@@ -204,6 +245,23 @@ Content-Type: application/json
     {"role": "user", "content": "Explain quantum computing"}
   ]
 }
+```
+
+## 🔐 Admin-Only API
+- Bu uç noktalar geçerli `X-Admin-Key` (değeri `ADMIN_API_KEY`) header’ı gerektirir.
+- Bu anahtarı asla istemci (mobil/web) uygulamalara gömmeyin; yalnızca güvenli sunucu tarafı kullanımlarda gönderin.
+
+Korumalı uçlar:
+- `GET /analytics/overview`
+- `GET /analytics/costs`
+- `GET /analytics/errors`
+- Tüm `/admin/*` uçları (kullanıcı/IP kural/webhook yönetimi)
+
+Örnek:
+```bash
+curl -H "Authorization: Bearer <JWT>" \
+     -H "X-Admin-Key: $ADMIN_API_KEY" \
+     https://your-app/analytics/overview
 ```
 
 ### 3️⃣ Health Check

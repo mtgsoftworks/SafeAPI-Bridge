@@ -32,12 +32,11 @@ router.post('/token', authLimiter, validateAuthRequest, async (req, res) => {
     // Check if this is a new user
     const isNewUser = user.createdAt.getTime() > Date.now() - 1000; // Created in last second
 
-    // Trigger webhook for new user
+    // Trigger webhook for new user (do not include sensitive apiKey)
     if (isNewUser) {
       await webhookService.trigger('user.created', {
         userId: user.userId,
         appId: user.appId,
-        apiKey: user.apiKey,
         quotas: {
           daily: user.dailyQuota,
           monthly: user.monthlyQuota
@@ -59,7 +58,6 @@ router.post('/token', authLimiter, validateAuthRequest, async (req, res) => {
     res.json({
       success: true,
       token,
-      apiKey: user.apiKey, // Return API key for reference
       expiresIn: '7 days',
       tokenType: 'Bearer',
       user: {

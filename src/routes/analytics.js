@@ -16,7 +16,7 @@ router.get('/overview', authenticateToken, async (req, res) => {
   try {
     // Restrict system-wide overview to admin key
     const adminKey = req.headers['x-admin-key'];
-    if (adminKey !== process.env.ADMIN_API_KEY) {
+    if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
       return res.status(403).json({
         error: 'Forbidden',
         message: 'Admin key required for overview analytics'
@@ -41,8 +41,10 @@ router.get('/overview', authenticateToken, async (req, res) => {
  */
 router.get('/user/:userId', authenticateToken, async (req, res) => {
   try {
-    // Users can only view their own stats (unless admin)
-    if (req.user.userId !== req.params.userId && !req.headers['x-admin-key']) {
+    // Users can only view their own stats (unless valid admin key)
+    const adminKey = req.headers['x-admin-key'];
+    const isAdmin = !!adminKey && adminKey === process.env.ADMIN_API_KEY;
+    if (req.user.userId !== req.params.userId && !isAdmin) {
       return res.status(403).json({
         error: 'Forbidden',
         message: 'You can only view your own statistics'
@@ -67,6 +69,14 @@ router.get('/user/:userId', authenticateToken, async (req, res) => {
  */
 router.get('/costs', authenticateToken, async (req, res) => {
   try {
+    // Admin-only endpoint
+    const adminKey = req.headers['x-admin-key'];
+    if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin key required for cost analytics'
+      });
+    }
     const { startDate, endDate } = req.query;
     const start = startDate ? new Date(startDate) : null;
     const end = endDate ? new Date(endDate) : null;
@@ -85,6 +95,14 @@ router.get('/costs', authenticateToken, async (req, res) => {
  */
 router.get('/errors', authenticateToken, async (req, res) => {
   try {
+    // Admin-only endpoint
+    const adminKey = req.headers['x-admin-key'];
+    if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin key required for error analytics'
+      });
+    }
     const { startDate, endDate } = req.query;
     const start = startDate ? new Date(startDate) : null;
     const end = endDate ? new Date(endDate) : null;

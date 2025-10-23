@@ -43,6 +43,8 @@ Your server will be available at: `https://safeapi-bridge.onrender.com`
 
 ## 🔧 Manual Deploy
 
+Note on database: The provided Render blueprint uses SQLite (`file:./dev.db`) for quick deployment. For production scale and concurrency, consider switching to PostgreSQL and update `DATABASE_URL` accordingly.
+
 ### Step 1: Create PostgreSQL Database
 
 1. Go to https://dashboard.render.com
@@ -96,6 +98,16 @@ ALLOWED_ORIGINS=https://yourapp.com,https://anotherapp.com
 RATE_LIMIT_MAX_REQUESTS=100
 RATE_LIMIT_WINDOW_MS=3600000
 ```
+
+### Step 5: Scheduled Resets (Quotas)
+To reset daily/monthly request counters, create scheduled jobs:
+
+- Daily reset (e.g., 00:00 UTC):
+  - Command: `npm run reset:daily`
+- Monthly reset (e.g., 1st of month 00:05 UTC):
+  - Command: `npm run reset:monthly`
+
+These run `scripts/scheduler/reset-quotas.js` and call built-in model methods.
 
 ### Step 4: Deploy
 

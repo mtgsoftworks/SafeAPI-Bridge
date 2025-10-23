@@ -57,7 +57,12 @@ services:
 
       # CORS
       - key: ALLOWED_ORIGINS
-        value: "*" # Change to your domain in production
+        value: "" # No web origins allowed by default; set your domain(s) if needed
+
+      # Allow native mobile (no Origin header)
+      - key: ALLOW_MOBILE_NO_ORIGIN
+        value: true
+
 
       # Rate Limiting
       - key: RATE_LIMIT_MAX_REQUESTS

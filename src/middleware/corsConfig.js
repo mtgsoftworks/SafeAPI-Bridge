@@ -8,17 +8,19 @@ const config = require('../config/env');
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, etc.)
+    // Native mobile apps and some tools send no Origin header
     if (!origin) {
-      return callback(null, true);
+      return callback(null, !!config.allowMobileNoOrigin);
     }
 
-    // Check if origin is allowed
-    if (config.allowedOrigins.indexOf(origin) !== -1 || config.allowedOrigins.includes('*')) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    // Strict exact-match check; ignore wildcard "*" for production hardening
+    if (config.allowedOrigins && config.allowedOrigins.length > 0) {
+      if (config.allowedOrigins.indexOf(origin) !== -1) {
+        return callback(null, true);
+      }
     }
+
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   optionsSuccessStatus: 200,

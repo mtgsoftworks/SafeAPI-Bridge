@@ -38,7 +38,7 @@ services:
       - key: REDIS_URL
         fromService:
           name: safeapi-redis
-          type: redis
+          type: keyvalue
           property: connectionString
 
       # API Keys (add these manually in Render dashboard or via sync)
@@ -68,12 +68,15 @@ services:
       - key: RATE_LIMIT_WINDOW_MS
         value: 3600000
 
-  # Redis Service
-  - type: redis
+  # Key Value (Redis-compatible) Service
+  - type: keyvalue
     name: safeapi-redis
     plan: starter # Free tier (30 days)
     region: oregon
     maxmemoryPolicy: allkeys-lru
+    ipAllowList: # Required for Key Value instances
+      - source: 0.0.0.0/0
+        description: everywhere
 
 # Database - PostgreSQL
 databases:

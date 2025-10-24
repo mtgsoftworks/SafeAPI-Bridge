@@ -56,8 +56,8 @@ app.use(logger);
 // Security monitoring (detects suspicious patterns)
 app.use(securityMonitor);
 
-// Rate limiting (global)
-app.use(limiter);
+// Rate limiting applied only to API routes (exclude '/' and '/health')
+app.use('/api', limiter);
 
 // Health check endpoint (no auth required)
 app.get('/', (req, res) => {

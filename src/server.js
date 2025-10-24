@@ -161,10 +161,7 @@ const gracefulShutdown = async (signal) => {
       await prisma.$disconnect();
       console.log('✅ Database connections closed');
 
-      // Close Redis connections
-      const redisClient = require('./db/redis');
-      await redisClient.closeRedis();
-      console.log('✅ Redis connections closed');
+      // No Redis connections to close (removed)
 
       console.log('✅ Graceful shutdown complete');
       process.exit(0);

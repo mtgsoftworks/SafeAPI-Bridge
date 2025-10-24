@@ -211,7 +211,7 @@ const getAvailableEndpoints = (req, res) => {
 
 /**
  * Health check for all configured APIs + infrastructure
- * Tests database and Redis connectivity
+ * Tests database connectivity
  */
 const healthCheck = async (req, res) => {
   // Light mode: keep health check extremely cheap and always HTTP 200
@@ -232,8 +232,7 @@ const healthCheck = async (req, res) => {
       timestamp: new Date().toISOString(),
       apis: status,
       infrastructure: {
-        database: { status: 'skipped', latency: 'N/A' },
-        redis: { status: 'skipped', latency: 'N/A' }
+        database: { status: 'skipped', latency: 'N/A' }
       },
       summary: `${Object.values(status).filter(s => s.configured).length}/${apis.length} APIs configured`
     });
@@ -266,25 +265,6 @@ const healthCheck = async (req, res) => {
     console.error('Database health check failed:', error.message);
   }
 
-  // Test Redis connectivity
-  let redisStatus = 'unknown';
-  let redisLatency = 0;
-  try {
-    const redisClient = require('../db/redis');
-    if (redisClient.isRedisAvailable()) {
-      const start = Date.now();
-      await redisClient.set('health_check', 'ok', 10);
-      const value = await redisClient.get('health_check');
-      redisLatency = Date.now() - start;
-      redisStatus = value === 'ok' ? 'connected' : 'error';
-    } else {
-      redisStatus = 'fallback_memory';
-    }
-  } catch (error) {
-    redisStatus = 'error';
-    console.error('Redis health check failed:', error.message);
-  }
-
   // Overall health status
   const isHealthy = dbStatus === 'connected';
   const overallStatus = isHealthy ? 'healthy' : 'degraded';
@@ -297,10 +277,6 @@ const healthCheck = async (req, res) => {
       database: {
         status: dbStatus,
         latency: `${dbLatency}ms`
-      },
-      redis: {
-        status: redisStatus,
-        latency: redisStatus === 'connected' ? `${redisLatency}ms` : 'N/A'
       }
     },
     summary: `${configuredCount}/${apis.length} APIs configured`

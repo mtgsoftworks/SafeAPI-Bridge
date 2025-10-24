@@ -1,5 +1,5 @@
 # Render.com Blueprint for SafeAPI-Bridge
-# This file automates deployment of the proxy server with PostgreSQL and optional Redis
+# This file automates deployment of the proxy server with PostgreSQL
 
 services:
   # Web Service - Node.js Server
@@ -32,12 +32,6 @@ services:
       - key: DATABASE_URL
         value: "file:./dev.db"
 
-      # Redis (Render Key-Value) — used for token blacklist and caching
-      - key: REDIS_URL
-        fromService:
-          name: safeapi-redis
-          type: keyvalue
-          property: connectionString
 
       # API Keys (add these manually in Render dashboard or via sync)
       - key: OPENAI_API_KEY
@@ -87,14 +81,6 @@ services:
       - key: UPSTREAM_TIMEOUT_MS
         value: 30000
 
-  # Key Value (Redis-compatible) Service
-  - type: keyvalue
-    name: safeapi-redis
-    plan: starter # Free tier (30 days)
-    region: oregon
-    maxmemoryPolicy: allkeys-lru
-    ipAllowList:
-      - source: 0.0.0.0/0
-        description: everywhere
+  # No Redis service required
 
 # Note: Using SQLite for simplicity; for higher concurrency/multi-instance, switch to PostgreSQL

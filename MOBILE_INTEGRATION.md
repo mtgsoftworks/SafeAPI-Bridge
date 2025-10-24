@@ -51,8 +51,7 @@ RATE_LIMIT_MAX_REQUESTS=100
 # CORS
 ALLOWED_ORIGINS=*
 
-# Redis (opsiyonel - caching için)
-REDIS_URL=redis://...  # opsiyonel
+# Redis kullanımı yoktur; ek yapılandırma gerekmez
 ```
 
 ### Adım 3: PostgreSQL Database Ekle

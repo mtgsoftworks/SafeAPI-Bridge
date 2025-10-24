@@ -5,7 +5,7 @@ describe('Token Blacklist Service', () => {
   const JWT_SECRET = 'test-secret';
 
   beforeEach(() => {
-    // Mock Redis to avoid actual connection in tests
+    // Reset mocks between tests
     jest.clearAllMocks();
   });
 

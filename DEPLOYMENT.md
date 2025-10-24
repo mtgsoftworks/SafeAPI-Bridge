@@ -17,7 +17,7 @@ Complete guide to deploy SafeAPI-Bridge on Render.com for production use with yo
 1. **Push to GitHub** (if not done already)
 ```bash
 git add .
-git commit -m "feat: Production-ready with PostgreSQL, Redis, Analytics"
+git commit -m "feat: Production-ready with PostgreSQL and Analytics"
 git push origin main
 ```
 
@@ -93,7 +93,6 @@ MISTRAL_API_KEY=...
 
 **Optional:**
 ```env
-REDIS_URL=<IF_YOU_HAVE_REDIS>
 ALLOWED_ORIGINS=https://yourapp.com,https://anotherapp.com
 RATE_LIMIT_MAX_REQUESTS=100
 RATE_LIMIT_WINDOW_MS=3600000
@@ -200,23 +199,7 @@ git push origin main
 
 ---
 
-## 🔴 Optional: Add Redis
-
-For better caching performance:
-
-1. Go to Render Dashboard
-2. Click "New" → "Redis"
-3. Configure:
-   - **Name**: `safeapi-redis`
-   - **Plan**: Starter (Free for 30 days)
-4. Copy the **Internal Redis URL**
-5. Add to your web service env vars:
-   ```env
-   REDIS_URL=redis://...
-   ```
-6. Redeploy the service
-
----
+<!-- Redis removed: project does not use Redis. -->
 
 ## 🎛️ Monitoring & Analytics
 
@@ -262,14 +245,12 @@ curl https://your-app.onrender.com/analytics/costs \
 - ✅ 1GB storage
 - ✅ 90 days free (then $7/month)
 
-**Redis Free Tier:**
-- ✅ 25MB storage
-- ⚠️ 30 days free (then $5/month)
+<!-- Redis tier notes removed -->
 
 ### Performance Tips
 
 1. **Prevent Spin Down**: Use a service like UptimeRobot to ping your server every 10 minutes
-2. **Enable Caching**: Use Redis for better performance
+2. **Enable Caching**: Consider CDN/edge or HTTP caching headers for performance
 3. **Monitor Usage**: Check analytics regularly to avoid quota surprises
 
 ### Security Best Practices

@@ -8,8 +8,9 @@ const path = require('path');
  */
 
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, '../../logs');
-const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+const LOG_LEVEL = process.env.LOG_LEVEL || (process.env.LIGHT_MODE === 'true' ? 'warn' : 'info');
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const DISABLE_FILE_LOGS = process.env.DISABLE_FILE_LOGS === 'true' || process.env.LIGHT_MODE === 'true';
 
 // Custom log levels for security events
 const customLevels = {
@@ -56,8 +57,8 @@ const fileFormat = winston.format.combine(
 // Create transports
 const transports = [];
 
-// Console transport (development only or if enabled)
-if (NODE_ENV === 'development') {
+// Console transport (development or when file logs disabled)
+if (NODE_ENV === 'development' || DISABLE_FILE_LOGS) {
   transports.push(
     new winston.transports.Console({
       format: consoleFormat
@@ -65,39 +66,41 @@ if (NODE_ENV === 'development') {
   );
 }
 
-// File transports with daily rotation
-// Combined log (all levels)
-transports.push(
-  new DailyRotateFile({
-    filename: path.join(LOG_DIR, 'combined-%DATE%.log'),
-    datePattern: 'YYYY-MM-DD',
-    maxFiles: '30d',
-    format: fileFormat,
-    level: LOG_LEVEL
-  })
-);
+// File transports with daily rotation (disabled in light mode)
+if (!DISABLE_FILE_LOGS) {
+  // Combined log (all levels)
+  transports.push(
+    new DailyRotateFile({
+      filename: path.join(LOG_DIR, 'combined-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      maxFiles: '30d',
+      format: fileFormat,
+      level: LOG_LEVEL
+    })
+  );
 
-// Error log (errors only)
-transports.push(
-  new DailyRotateFile({
-    filename: path.join(LOG_DIR, 'error-%DATE%.log'),
-    datePattern: 'YYYY-MM-DD',
-    maxFiles: '30d',
-    format: fileFormat,
-    level: 'error'
-  })
-);
+  // Error log (errors only)
+  transports.push(
+    new DailyRotateFile({
+      filename: path.join(LOG_DIR, 'error-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      maxFiles: '30d',
+      format: fileFormat,
+      level: 'error'
+    })
+  );
 
-// Security log (security events only)
-transports.push(
-  new DailyRotateFile({
-    filename: path.join(LOG_DIR, 'security-%DATE%.log'),
-    datePattern: 'YYYY-MM-DD',
-    maxFiles: '90d', // Keep security logs longer
-    format: fileFormat,
-    level: 'security'
-  })
-);
+  // Security log (security events only)
+  transports.push(
+    new DailyRotateFile({
+      filename: path.join(LOG_DIR, 'security-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      maxFiles: '90d', // Keep security logs longer
+      format: fileFormat,
+      level: 'security'
+    })
+  );
+}
 
 // Create logger instance
 const logger = winston.createLogger({

@@ -23,32 +23,35 @@ class UsageTrackingService {
     responseData = null
   }) {
     try {
-      // Estimate tokens and cost
-      const { tokensUsed, estimatedCost } = this.estimateCost(api, responseData);
+      const lightMode = process.env.LIGHT_MODE === 'true';
+      // Estimate tokens and cost (skip in light mode to reduce CPU)
+      const { tokensUsed, estimatedCost } = lightMode ? { tokensUsed: 0, estimatedCost: 0 } : this.estimateCost(api, responseData);
 
-      // Log to database
-      await UsageModel.log({
-        userId,
-        api,
-        endpoint,
-        method,
-        statusCode,
-        success,
-        tokensUsed,
-        estimatedCost,
-        responseTime,
-        ipAddress: req.ip || req.connection.remoteAddress,
-        userAgent: req.headers['user-agent']
-      });
+      if (!lightMode) {
+        // Detailed logging only in normal mode
+        await UsageModel.log({
+          userId,
+          api,
+          endpoint,
+          method,
+          statusCode,
+          success,
+          tokensUsed,
+          estimatedCost,
+          responseTime,
+          ipAddress: req.ip || req.connection.remoteAddress,
+          userAgent: req.headers['user-agent']
+        });
+      }
 
-      // Increment user counters
+      // Always increment request counters (required for quotas)
       await UserModel.incrementRequests(userId);
 
-      // Update total cost
-      await this.updateUserCost(userId, estimatedCost);
-
-      // Check for high usage and trigger webhook if needed
-      await this.checkUsageThresholds(userId);
+      if (!lightMode) {
+        // Update total cost and thresholds only in normal mode
+        await this.updateUserCost(userId, estimatedCost);
+        await this.checkUsageThresholds(userId);
+      }
 
       return { tokensUsed, estimatedCost };
     } catch (error) {

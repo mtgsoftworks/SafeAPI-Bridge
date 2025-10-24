@@ -10,7 +10,7 @@ services:
     plan: starter # Free tier
     buildCommand: npm install && npx prisma generate && npx prisma db push
     startCommand: npm start
-    healthCheckPath: /health
+    healthCheckPath: /
 
     # Auto-deploy on push to main
     branch: main
@@ -32,7 +32,7 @@ services:
       - key: DATABASE_URL
         value: "file:./dev.db"
 
-      # Use Redis internal URL from Redis service below (if present)
+      # Redis (Render Key-Value) — used for token blacklist and caching
       - key: REDIS_URL
         fromService:
           name: safeapi-redis
@@ -71,14 +71,30 @@ services:
       - key: RATE_LIMIT_WINDOW_MS
         value: 3600000
 
+      # Light mode: reduce IO and logging for stability and performance
+      - key: LIGHT_MODE
+        value: true
+
+      - key: DISABLE_FILE_LOGS
+        value: true
+
+      - key: DISABLE_HTTP_LOGS
+        value: true
+
+      - key: LOG_LEVEL
+        value: warn
+
+      - key: UPSTREAM_TIMEOUT_MS
+        value: 30000
+
   # Key Value (Redis-compatible) Service
   - type: keyvalue
     name: safeapi-redis
     plan: starter # Free tier (30 days)
     region: oregon
     maxmemoryPolicy: allkeys-lru
-    ipAllowList: # Required for Key Value instances
+    ipAllowList:
       - source: 0.0.0.0/0
         description: everywhere
 
-# Removed external Postgres; using SQLite file DB
+# Note: Using SQLite for simplicity; for higher concurrency/multi-instance, switch to PostgreSQL

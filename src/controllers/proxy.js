@@ -78,6 +78,7 @@ const proxyRequest = async (req, res) => {
     const wantsStream = acceptHeader.includes('text/event-stream') || requestData.stream === true;
 
     // Prepare axios config
+    const timeoutMs = parseInt(process.env.UPSTREAM_TIMEOUT_MS || '0') || (process.env.LIGHT_MODE === 'true' ? 30000 : 60000);
     const axiosConfig = {
       method: req.method,
       url: targetUrl,
@@ -85,7 +86,7 @@ const proxyRequest = async (req, res) => {
         ...headers,
         ...(req.headers['user-agent'] && { 'User-Agent': req.headers['user-agent'] })
       },
-      timeout: 60000,
+      timeout: timeoutMs,
       validateStatus: (status) => status < 600,
       ...(wantsStream && { responseType: 'stream' })
     };
@@ -213,6 +214,31 @@ const getAvailableEndpoints = (req, res) => {
  * Tests database and Redis connectivity
  */
 const healthCheck = async (req, res) => {
+  // Light mode: keep health check extremely cheap and always HTTP 200
+  if (process.env.LIGHT_MODE === 'true') {
+    const apis = ['openai', 'gemini', 'claude', 'groq', 'mistral'];
+    const status = {};
+    apis.forEach(api => {
+      const apiConfig = config[api];
+      status[api] = {
+        configured: !!(apiConfig && apiConfig.apiKey),
+        baseUrl: apiConfig?.baseUrl || 'Not configured'
+      };
+    });
+
+    return res.status(200).json({
+      status: 'healthy',
+      mode: 'light',
+      timestamp: new Date().toISOString(),
+      apis: status,
+      infrastructure: {
+        database: { status: 'skipped', latency: 'N/A' },
+        redis: { status: 'skipped', latency: 'N/A' }
+      },
+      summary: `${Object.values(status).filter(s => s.configured).length}/${apis.length} APIs configured`
+    });
+  }
+
   const apis = ['openai', 'gemini', 'claude', 'groq', 'mistral'];
   const status = {};
 

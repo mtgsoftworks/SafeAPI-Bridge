@@ -116,12 +116,12 @@ const server = app.listen(PORT, () => {
   console.log('='.repeat(50) + '\n');
 });
 
-// Configure HTTP keep-alive for better connection reuse
-server.keepAliveTimeout = 65000; // 65 seconds (must be higher than load balancer timeout)
-server.headersTimeout = 66000; // Slightly higher than keepAliveTimeout
+// Configure HTTP keep-alive for better connection reuse (tuned for Render)
+server.keepAliveTimeout = 60000; // 60 seconds
+server.headersTimeout = 65000; // Slightly higher than keepAliveTimeout
 
 // Memory monitoring (log every 5 minutes in production)
-if (config.nodeEnv === 'production') {
+if (config.nodeEnv === 'production' && process.env.LIGHT_MODE !== 'true') {
   const memoryMonitor = setInterval(() => {
     const usage = process.memoryUsage();
     console.log('📊 Memory Usage:', {

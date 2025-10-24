@@ -32,7 +32,12 @@ const prodFormat = morgan(
   ':remote-addr - :user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" - :response-time ms'
 );
 
+// Optionally disable HTTP request logging for light mode
+const disableHttpLogs = process.env.DISABLE_HTTP_LOGS === 'true' || process.env.LIGHT_MODE === 'true';
+
 // Choose format based on environment
-const logger = config.nodeEnv === 'production' ? prodFormat : devFormat;
+const logger = disableHttpLogs
+  ? (req, res, next) => next()
+  : (config.nodeEnv === 'production' ? prodFormat : devFormat);
 
 module.exports = logger;

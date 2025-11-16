@@ -1,12 +1,12 @@
 // Prisma Schema for SafeAPI-Bridge
-// PostgreSQL database configuration
+// Database configuration (PostgreSQL in production)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

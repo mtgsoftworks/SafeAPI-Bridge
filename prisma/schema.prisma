@@ -1,0 +1,213 @@
+// Prisma Schema for SafeAPI-Bridge
+// PostgreSQL database configuration
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User model - Stores application users
+model User {
+  id        String   @id @default(uuid())
+  userId    String   @unique // User identifier from client app
+  appId     String   // Application identifier
+  apiKey    String   @unique // Generated API key for this user
+
+  // Quotas and limits
+  dailyQuota      Int      @default(100) // Daily request limit
+  monthlyQuota    Int      @default(3000) // Monthly request limit
+  requestsToday   Int      @default(0)
+  requestsMonth   Int      @default(0)
+
+  // Cost tracking
+  totalCost       Float    @default(0)
+
+  // Status
+  active          Boolean  @default(true)
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastUsedAt      DateTime?
+
+  // Relations
+  usage           ApiUsage[]
+
+  @@index([userId])
+  @@index([apiKey])
+}
+
+// API Usage tracking
+model ApiUsage {
+  id            String   @id @default(uuid())
+
+  // User reference (stores User.userId, not User.id)
+  userId        String
+  user          User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  // Request details
+  api           String   // openai, gemini, claude, etc.
+  endpoint      String   // /chat/completions, /models/gemini-pro, etc.
+  method        String   @default("POST")
+
+  // Response details
+  statusCode    Int
+  success       Boolean  @default(true)
+
+  // Usage metrics
+  tokensUsed    Int      @default(0)
+  estimatedCost Float    @default(0)
+  responseTime  Int      // milliseconds
+
+  // IP and metadata
+  ipAddress     String?
+  userAgent     String?
+
+  // Timestamp
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([api])
+  @@index([createdAt])
+}
+
+// IP Rules (Whitelist/Blacklist)
+model IpRule {
+  id          String   @id @default(uuid())
+
+  // IP configuration
+  ipAddress   String   @unique
+  type        String   // 'whitelist' or 'blacklist'
+
+  // Metadata
+  reason      String?
+  addedBy     String?  // Admin who added this rule
+
+  // Status
+  active      Boolean  @default(true)
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([ipAddress])
+  @@index([type])
+}
+
+// Webhook configuration
+model Webhook {
+  id          String   @id @default(uuid())
+
+  // Webhook configuration
+  url         String
+  events      String   // Comma-separated: 'user.created,user.rate_limited,api.error,usage.high'
+
+  // Authentication (optional)
+  secret      String?
+  headers     String?  // JSON string of additional headers
+
+  // Status
+  active      Boolean  @default(true)
+
+  // Retry configuration
+  retryCount  Int      @default(3)
+  timeout     Int      @default(5000) // milliseconds
+
+  // Statistics
+  totalCalls  Int      @default(0)
+  failedCalls Int      @default(0)
+  lastCall    DateTime?
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active])
+}
+
+// Admin users (optional - for admin panel authentication)
+model Admin {
+  id          String   @id @default(uuid())
+
+  username    String   @unique
+  password    String   // Hashed password
+  email       String?  @unique
+
+  // Permissions
+  role        String   @default("admin") // admin, superadmin
+
+  // Status
+  active      Boolean  @default(true)
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastLogin   DateTime?
+
+  @@index([username])
+}
+
+// Split Key model for BYOK functionality
+model SplitKey {
+  id          String   @id @default(uuid())
+
+  // Key identification
+  keyId       String   @unique // Public identifier used by clients
+  apiProvider String   // openai, gemini, claude, etc.
+
+  // Split key components
+  serverPart  String   // Server's encrypted part (Part A)
+  clientPart  String   // Client's encrypted part (Part B)
+  decryptionSecret String // Secret to decrypt the key
+
+  // Key metadata
+  algorithm   String   @default("AES-256-GCM") // Encryption algorithm used
+  keyVersion  Int      @default(1) // Version for rotation
+
+  // Status and metadata
+  active      Boolean  @default(true)
+  description String?  // Human-readable description
+  createdBy   String   // User who created this key
+
+  // Usage tracking
+  usageCount  Int      @default(0)
+  lastUsed    DateTime?
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([keyId])
+  @@index([apiProvider])
+  @@index([active])
+}
+
+// Audit Log (admin operations tracking)
+model AuditLog {
+  id          String   @id @default(uuid())
+
+  // Action details
+  action      String   // e.g., "user.create", "webhook.delete", "ip_rule.add"
+  adminKey    String   // Hashed admin key (for privacy)
+
+  // Request details
+  ipAddress   String
+  userAgent   String?
+
+  // Additional data (JSON string)
+  details     String?  // JSON-encoded details
+
+  // Status
+  success     Boolean  @default(true)
+
+  // Timestamp
+  createdAt   DateTime @default(now())
+
+  @@index([action])
+  @@index([adminKey])
+  @@index([createdAt])
+}

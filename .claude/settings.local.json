@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm start)",
+      "Bash(timeout /t 3 /nobreak)",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(npx prisma migrate:*)",
+      "Bash(del dev.db)",
+      "Bash(del /s /q prismamigrations*)",
+      "Bash(npx prisma db push:*)",
+      "Bash(timeout:*)",
+      "Bash(cat:*)",
+      "WebSearch",
+      "Bash(tree:*)",
+      "Bash(dir /s \"C:\\Users\\mtg\\Desktop\\API‑Key‑Proxy‑Server\")",
+      "Bash(node scripts/remote/test-gemini.js:*)",
+      "Bash(node scripts/remote/test-security.js:*)",
+      "Bash(node scripts/remote/test-api-leak.js:*)",
+      "Bash(find:*)",
+      "Bash(npm audit:*)",
+      "Bash(ping:*)",
+      "mcp__serena__list_dir",
+      "mcp__serena__activate_project"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

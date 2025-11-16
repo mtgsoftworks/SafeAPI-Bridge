@@ -1,0 +1,453 @@
+openapi: 3.0.3
+info:
+  title: SafeAPI-Bridge
+  version: 1.0.0
+  description: |
+    Secure API proxy for AI providers with BYOK (split key) support.
+
+    This specification is focused on backend usage:
+    - JWT authentication via `/auth/token`
+    - Proxying AI requests via `/api/{api}/proxy`
+    - BYOK split-key management via `/api/split-key/*`
+
+servers:
+  - url: http://localhost:3003
+    description: Local development
+  - url: https://safeapi-bridge.example.com
+    description: Production (example)
+
+tags:
+  - name: Auth
+  - name: Proxy
+  - name: SplitKey
+  - name: Analytics
+  - name: Admin
+
+paths:
+  /:
+    get:
+      summary: Service info
+      tags: [Auth]
+      responses:
+        '200':
+          description: Service information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                  status:
+                    type: string
+                  version:
+                    type: string
+
+  /health:
+    get:
+      summary: Health check
+      tags: [Auth]
+      responses:
+        '200':
+          description: Healthy
+        '503':
+          description: Degraded or unhealthy
+
+  /auth/token:
+    post:
+      summary: Get JWT token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthTokenRequest'
+      responses:
+        '200':
+          description: JWT issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+
+  /auth/verify:
+    get:
+      summary: Verify current JWT
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token is valid
+        '401':
+          description: Invalid or missing token
+
+  /auth/logout:
+    post:
+      summary: Logout (revoke token)
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token revoked
+        '401':
+          description: Invalid or missing token
+
+  /auth/token-info:
+    get:
+      summary: Get current token info
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token info
+
+  /api/{api}/endpoints:
+    get:
+      summary: List allowed endpoints for provider
+      tags: [Proxy]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: api
+          required: true
+          schema:
+            type: string
+            enum: [openai, gemini, claude, groq, mistral]
+      responses:
+        '200':
+          description: List of allowed endpoints
+
+  /api/{api}/proxy:
+    post:
+      summary: Proxy AI request (server key or BYOK)
+      tags: [Proxy]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: api
+          required: true
+          schema:
+            type: string
+            enum: [openai, gemini, claude, groq, mistral]
+        - in: header
+          name: X-Partial-Key-Id
+          schema:
+            type: string
+          required: false
+          description: >
+            BYOK Split Key ID. When provided together with X-Partial-Key,
+            the request uses BYOK mode instead of server-side API keys.
+        - in: header
+          name: X-Partial-Key
+          schema:
+            type: string
+          required: false
+          description: >
+            BYOK client part corresponding to X-Partial-Key-Id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProxyRequest'
+            examples:
+              openaiChat:
+                summary: OpenAI chat.completions example
+                value:
+                  endpoint: /chat/completions
+                  model: gpt-3.5-turbo
+                  messages:
+                    - role: user
+                      content: "Hello from SafeAPI-Bridge"
+              geminiGenerateContent:
+                summary: Gemini generateContent example
+                value:
+                  endpoint: /models/gemini-2.5-flash:generateContent
+                  contents:
+                    - parts:
+                        - text: "Explain SafeAPI-Bridge in one paragraph."
+                  generationConfig:
+                    maxOutputTokens: 256
+                    temperature: 0.7
+      responses:
+        '200':
+          description: Proxied provider response
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Provider response payload (transparent)
+        '401':
+          description: Auth or BYOK error
+        '403':
+          description: Endpoint not allowed
+        '429':
+          description: Quota exceeded
+
+  /api/split-key/split:
+    post:
+      summary: Create a new split key (BYOK)
+      tags: [SplitKey]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SplitKeyCreateRequest'
+      responses:
+        '201':
+          description: Split key created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SplitKeyCreateResponse'
+        '400':
+          description: Validation error
+        '409':
+          description: Key ID already exists
+
+  /api/split-key:
+    get:
+      summary: List split keys for current user
+      tags: [SplitKey]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of split keys
+
+  /api/split-key/{keyId}:
+    get:
+      summary: Get split key details
+      tags: [SplitKey]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: keyId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Split key details
+        '404':
+          description: Not found
+    delete:
+      summary: Deactivate a split key
+      tags: [SplitKey]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: keyId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deactivated
+        '404':
+          description: Not found
+
+  /api/split-key/validate:
+    post:
+      summary: Validate split key headers
+      tags: [SplitKey]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Headers valid
+        '400':
+          description: Headers invalid
+
+  /analytics/my-stats:
+    get:
+      summary: Get current user's usage statistics
+      tags: [Analytics]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Usage stats
+
+  /analytics/overview:
+    get:
+      summary: System-wide overview (admin)
+      tags: [Analytics]
+      security:
+        - bearerAuth: []
+        - adminApiKey: []
+      parameters:
+        - in: header
+          name: X-Admin-Key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Overview stats
+        '403':
+          description: Missing or invalid admin key
+
+  /analytics/costs:
+    get:
+      summary: Cost breakdown (admin)
+      tags: [Analytics]
+      security:
+        - bearerAuth: []
+        - adminApiKey: []
+      parameters:
+        - in: header
+          name: X-Admin-Key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cost stats
+        '403':
+          description: Missing or invalid admin key
+
+  /analytics/errors:
+    get:
+      summary: Error statistics (admin)
+      tags: [Analytics]
+      security:
+        - bearerAuth: []
+        - adminApiKey: []
+      parameters:
+        - in: header
+          name: X-Admin-Key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Error stats
+        '403':
+          description: Missing or invalid admin key
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+
+  schemas:
+    AuthTokenRequest:
+      type: object
+      required: [userId, appId]
+      properties:
+        userId:
+          type: string
+          example: user123
+        appId:
+          type: string
+          example: android-app
+
+    AuthTokenResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        token:
+          type: string
+        expiresIn:
+          type: string
+          example: 7 days
+        tokenType:
+          type: string
+          example: Bearer
+        user:
+          type: object
+          properties:
+            userId:
+              type: string
+            appId:
+              type: string
+            dailyQuota:
+              type: integer
+            monthlyQuota:
+              type: integer
+            requestsToday:
+              type: integer
+            requestsMonth:
+              type: integer
+
+    ProxyRequest:
+      type: object
+      required: [endpoint]
+      properties:
+        endpoint:
+          type: string
+          description: Provider endpoint path (must start with / and be in whitelist).
+          example: /chat/completions
+        stream:
+          type: boolean
+          description: >
+            If true and supported by provider, enables streaming responses.
+        # Other fields are provider-specific and passed through as-is
+      additionalProperties: true
+
+    SplitKeyCreateRequest:
+      type: object
+      required: [originalKey, apiProvider]
+      properties:
+        originalKey:
+          type: string
+          description: Original provider API key to split.
+        apiProvider:
+          type: string
+          enum: [openai, gemini, claude, groq, mistral]
+        keyId:
+          type: string
+          description: >
+            Optional custom key identifier. If omitted, server generates
+            "sk-{appId}-{userId}-{random}".
+        description:
+          type: string
+          nullable: true
+
+    SplitKeyCreateResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            keyId:
+              type: string
+            apiProvider:
+              type: string
+            clientPart:
+              type: string
+              description: >
+                Client-side part of the split key. Must be stored securely
+                and sent as X-Partial-Key header.
+            algorithm:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+            instructions:
+              type: object
+              description: Convenience usage instructions.
+

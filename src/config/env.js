@@ -72,6 +72,13 @@ const config = {
     baseUrl: process.env.FIREWORKS_BASE_URL || 'https://api.fireworks.ai/inference/v1'
   },
 
+  // GitHub Models (OpenAI-compatible)
+  github: {
+    apiKey: process.env.GITHUB_MODELS_API_KEY || process.env.GITHUB_TOKEN,
+    // Example base from usage.txt: https://models.github.ai/inference
+    baseUrl: process.env.GITHUB_MODELS_BASE_URL || 'https://models.github.ai/inference'
+  },
+
   // Image / video providers
   replicate: {
     apiKey: process.env.REPLICATE_API_KEY,
@@ -153,6 +160,7 @@ const validateConfig = () => {
     config.together.apiKey ||
     config.openrouter.apiKey ||
     config.fireworks.apiKey ||
+    config.github.apiKey ||
     config.replicate.apiKey ||
     config.stability.apiKey ||
     config.fal.apiKey ||

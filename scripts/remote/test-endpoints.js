@@ -48,6 +48,7 @@ async function main() {
     'together',
     'openrouter',
     'fireworks',
+    'github',
     'replicate',
     'stability',
     'fal',

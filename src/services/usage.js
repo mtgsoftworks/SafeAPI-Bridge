@@ -94,7 +94,7 @@ class UsageTrackingService {
 
       // Groq, Mistral and other OpenAI-like providers
       if (
-        ['groq', 'mistral', 'deepseek', 'perplexity', 'together', 'openrouter', 'fireworks'].includes(api) &&
+        ['groq', 'mistral', 'deepseek', 'perplexity', 'together', 'openrouter', 'fireworks', 'github'].includes(api) &&
         responseData.usage
       ) {
         tokensUsed = responseData.usage.total_tokens || 0;

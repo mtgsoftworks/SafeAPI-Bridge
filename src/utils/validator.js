@@ -23,6 +23,7 @@ const validateProxyRequest = (req, res, next) => {
     'together',
     'openrouter',
     'fireworks',
+    'github',
     'replicate',
     'stability',
     'fal',

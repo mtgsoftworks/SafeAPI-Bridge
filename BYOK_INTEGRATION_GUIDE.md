@@ -233,7 +233,7 @@ POST /api/split-key/split
 ```json
 {
   "originalKey": "sk-your-api-key",
-  "apiProvider": "openai|gemini|claude|groq|mistral|zai|deepseek|perplexity|together|openrouter|fireworks|replicate|stability|fal|elevenlabs|brave|deepl|openmeteo",
+  "apiProvider": "openai|gemini|claude|groq|mistral|zai|deepseek|perplexity|together|openrouter|fireworks|github|replicate|stability|fal|elevenlabs|brave|deepl|openmeteo",
   "keyId": "unique-key-identifier",
   "description": "Optional description"
 }

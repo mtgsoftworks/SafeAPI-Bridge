@@ -83,6 +83,13 @@ const allowedEndpoints = {
     '/models'
   ],
 
+  github: [
+    '/v1/chat/completions',
+    '/v1/completions',
+    '/v1/embeddings',
+    '/v1/models'
+  ],
+
   replicate: [
     '/predictions',
     '/deployments',
@@ -177,6 +184,11 @@ const apiHeaders = {
   }),
 
   fireworks: (apiKey) => ({
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json'
+  }),
+
+  github: (apiKey) => ({
     'Authorization': `Bearer ${apiKey}`,
     'Content-Type': 'application/json'
   }),

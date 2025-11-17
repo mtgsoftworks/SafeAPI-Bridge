@@ -37,7 +37,7 @@ router.get('/:api/endpoints', authenticateToken, getAvailableEndpoints);
  * 8. proxyRequest - Forward to API
  *
  * Params:
- *   api: openai | gemini | claude | groq | mistral | zai | deepseek | perplexity | together | openrouter | fireworks | replicate | stability | fal | elevenlabs | brave | deepl | openmeteo
+ *   api: openai | gemini | claude | groq | mistral | zai | deepseek | perplexity | together | openrouter | fireworks | github | replicate | stability | fal | elevenlabs | brave | deepl | openmeteo
  *
  * Headers (for BYOK Split Key method):
  *   Authorization: Bearer <JWT_TOKEN>
@@ -148,6 +148,12 @@ router.post('/openrouter', ipCheck, authenticateToken, quotaCheck, validateSplit
 // Fireworks AI
 router.post('/fireworks', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
   req.params.api = 'fireworks';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// GitHub Models
+router.post('/github', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'github';
   next();
 }, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
 

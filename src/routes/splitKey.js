@@ -69,6 +69,7 @@ router.post('/split', authenticateToken, splitKeyLimiter, async (req, res) => {
       'together',
       'openrouter',
       'fireworks',
+      'github',
       'replicate',
       'stability',
       'fal',

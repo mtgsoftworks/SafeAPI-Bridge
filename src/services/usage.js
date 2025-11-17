@@ -92,8 +92,11 @@ class UsageTrackingService {
         estimatedCost = (tokensUsed / 1000) * 0.008;
       }
 
-      // Groq, Mistral (similar to OpenAI)
-      if ((api === 'groq' || api === 'mistral') && responseData.usage) {
+      // Groq, Mistral and other OpenAI-like providers
+      if (
+        ['groq', 'mistral', 'deepseek', 'perplexity', 'together', 'openrouter', 'fireworks'].includes(api) &&
+        responseData.usage
+      ) {
         tokensUsed = responseData.usage.total_tokens || 0;
         estimatedCost = (tokensUsed / 1000) * 0.001; // Usually cheaper
       }

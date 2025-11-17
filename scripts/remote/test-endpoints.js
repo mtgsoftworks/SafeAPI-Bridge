@@ -36,7 +36,26 @@ async function main() {
   console.log(`Token length: ${token?.length}`);
 
   const headers = { Authorization: `Bearer ${token}` };
-  const apis = ['openai', 'gemini', 'claude', 'groq', 'mistral'];
+  const apis = [
+    'openai',
+    'gemini',
+    'claude',
+    'groq',
+    'mistral',
+    'zai',
+    'deepseek',
+    'perplexity',
+    'together',
+    'openrouter',
+    'fireworks',
+    'replicate',
+    'stability',
+    'fal',
+    'elevenlabs',
+    'brave',
+    'deepl',
+    'openmeteo'
+  ];
 
   console.log('2) Fetching allowed endpoints for each API...');
   for (const api of apis) {
@@ -66,4 +85,3 @@ main().catch(err => {
   }
   process.exit(1);
 });
-

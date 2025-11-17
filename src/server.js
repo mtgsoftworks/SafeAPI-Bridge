@@ -118,6 +118,7 @@ const server = app.listen(PORT, () => {
   console.log(`  - Claude: ${config.claude.apiKey ? '✅ Configured' : '❌ Not configured'}`);
   console.log(`  - Groq: ${config.groq.apiKey ? '✅ Configured' : '❌ Not configured'}`);
   console.log(`  - Mistral: ${config.mistral.apiKey ? '✅ Configured' : '❌ Not configured'}`);
+  console.log(`  - Z.ai (GLM): ${config.zai.apiKey ? '✅ Configured' : '❌ Not configured'}`);
   console.log('\n⚙️  Configuration:');
   console.log(`  - Rate Limit: ${config.rateLimiting.maxRequests} requests per ${config.rateLimiting.windowMs / 1000 / 60} minutes`);
   console.log(`  - JWT Expiry: ${config.jwtExpiresIn}`);

@@ -117,7 +117,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [openai, gemini, claude, groq, mistral]
+            enum: [openai, gemini, claude, groq, mistral, zai, deepseek, perplexity, together, openrouter, fireworks, replicate, stability, fal, elevenlabs, brave, deepl, openmeteo]
       responses:
         '200':
           description: List of allowed endpoints
@@ -134,7 +134,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [openai, gemini, claude, groq, mistral]
+            enum: [openai, gemini, claude, groq, mistral, zai, deepseek, perplexity, together, openrouter, fireworks, replicate, stability, fal, elevenlabs, brave, deepl, openmeteo]
         - in: header
           name: X-Partial-Key-Id
           schema:
@@ -413,7 +413,7 @@ components:
           description: Original provider API key to split.
         apiProvider:
           type: string
-          enum: [openai, gemini, claude, groq, mistral]
+          enum: [openai, gemini, claude, groq, mistral, zai, deepseek, perplexity, together, openrouter, fireworks, replicate, stability, fal, elevenlabs, brave, deepl, openmeteo]
         keyId:
           type: string
           description: >
@@ -450,4 +450,3 @@ components:
             instructions:
               type: object
               description: Convenience usage instructions.
-

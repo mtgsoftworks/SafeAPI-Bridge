@@ -57,7 +57,26 @@ router.post('/split', authenticateToken, splitKeyLimiter, async (req, res) => {
     }
 
     // Validate API provider
-    const validProviders = ['openai', 'gemini', 'claude', 'groq', 'mistral'];
+    const validProviders = [
+      'openai',
+      'gemini',
+      'claude',
+      'groq',
+      'mistral',
+      'zai',
+      'deepseek',
+      'perplexity',
+      'together',
+      'openrouter',
+      'fireworks',
+      'replicate',
+      'stability',
+      'fal',
+      'elevenlabs',
+      'brave',
+      'deepl',
+      'openmeteo'
+    ];
     if (!validProviders.includes(apiProvider.toLowerCase())) {
       return res.status(400).json({
         error: 'Invalid API provider',

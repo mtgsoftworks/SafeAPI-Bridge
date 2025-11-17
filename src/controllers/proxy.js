@@ -299,7 +299,26 @@ const getAvailableEndpoints = (req, res) => {
 const healthCheck = async (req, res) => {
   // Light mode: keep health check extremely cheap and always HTTP 200
   if (process.env.LIGHT_MODE === 'true') {
-    const apis = ['openai', 'gemini', 'claude', 'groq', 'mistral'];
+    const apis = [
+      'openai',
+      'gemini',
+      'claude',
+      'groq',
+      'mistral',
+      'zai',
+      'deepseek',
+      'perplexity',
+      'together',
+      'openrouter',
+      'fireworks',
+      'replicate',
+      'stability',
+      'fal',
+      'elevenlabs',
+      'brave',
+      'deepl',
+      'openmeteo'
+    ];
     const status = {};
     apis.forEach(api => {
       const apiConfig = config[api];
@@ -321,7 +340,26 @@ const healthCheck = async (req, res) => {
     });
   }
 
-  const apis = ['openai', 'gemini', 'claude', 'groq', 'mistral'];
+  const apis = [
+    'openai',
+    'gemini',
+    'claude',
+    'groq',
+    'mistral',
+    'zai',
+    'deepseek',
+    'perplexity',
+    'together',
+    'openrouter',
+    'fireworks',
+    'replicate',
+    'stability',
+    'fal',
+    'elevenlabs',
+    'brave',
+    'deepl',
+    'openmeteo'
+  ];
   const status = {};
 
   apis.forEach(api => {

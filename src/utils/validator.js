@@ -11,7 +11,26 @@ const validateProxyRequest = (req, res, next) => {
   const { api } = params;
 
   // Validate API parameter
-  const validApis = ['openai', 'gemini', 'claude', 'groq', 'mistral'];
+  const validApis = [
+    'openai',
+    'gemini',
+    'claude',
+    'groq',
+    'mistral',
+    'zai',
+    'deepseek',
+    'perplexity',
+    'together',
+    'openrouter',
+    'fireworks',
+    'replicate',
+    'stability',
+    'fal',
+    'elevenlabs',
+    'brave',
+    'deepl',
+    'openmeteo'
+  ];
   if (!validApis.includes(api)) {
     return res.status(400).json({
       error: 'Invalid API',

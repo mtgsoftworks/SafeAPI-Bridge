@@ -37,7 +37,7 @@ router.get('/:api/endpoints', authenticateToken, getAvailableEndpoints);
  * 8. proxyRequest - Forward to API
  *
  * Params:
- *   api: openai | gemini | claude | groq | mistral
+ *   api: openai | gemini | claude | groq | mistral | zai | deepseek | perplexity | together | openrouter | fireworks | replicate | stability | fal | elevenlabs | brave | deepl | openmeteo
  *
  * Headers (for BYOK Split Key method):
  *   Authorization: Bearer <JWT_TOKEN>
@@ -112,6 +112,84 @@ router.post('/groq', ipCheck, authenticateToken, quotaCheck, validateSplitKey, r
 // Mistral
 router.post('/mistral', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
   req.params.api = 'mistral';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// Z.ai (GLM-4.6 and similar models)
+router.post('/zai', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'zai';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// DeepSeek
+router.post('/deepseek', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'deepseek';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// Perplexity
+router.post('/perplexity', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'perplexity';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// Together AI
+router.post('/together', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'together';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// OpenRouter
+router.post('/openrouter', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'openrouter';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// Fireworks AI
+router.post('/fireworks', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'fireworks';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// Replicate
+router.post('/replicate', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'replicate';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// Stability AI
+router.post('/stability', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'stability';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// Fal AI
+router.post('/fal', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'fal';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// ElevenLabs
+router.post('/elevenlabs', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'elevenlabs';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// Brave Search
+router.post('/brave', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'brave';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// DeepL
+router.post('/deepl', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'deepl';
+  next();
+}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+
+// Open-Meteo
+router.post('/openmeteo', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
+  req.params.api = 'openmeteo';
   next();
 }, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
 

@@ -79,7 +79,7 @@ async function main() {
 
     console.log('Split key created.');
     console.log('keyId (auto-generated):', keyId);
-    console.log('clientPart (first 32 chars):', clientPart.slice(0, 32) + '...');
+    console.log('clientPart (full):', clientPart);
     console.log('');
 
     // 3) Call Gemini via proxy using BYOK (non-streaming)

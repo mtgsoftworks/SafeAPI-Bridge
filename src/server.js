@@ -1,6 +1,18 @@
 const express = require('express');
 const helmet = require('helmet');
+const swaggerUi = require('swagger-ui-express');
+const YAML = require('yamljs');
+const path = require('path');
 const config = require('./config/env');
+
+// Load OpenAPI specification
+let swaggerDocument;
+try {
+  swaggerDocument = YAML.load(path.join(__dirname, '..', 'openapi.yaml'));
+} catch (error) {
+  console.warn('⚠️  OpenAPI spec not found, Swagger UI will be disabled');
+  swaggerDocument = null;
+}
 
 // Middleware
 const requestIdMiddleware = require('./middleware/requestId');
@@ -84,6 +96,31 @@ app.get('/', (req, res) => {
 
 app.get('/health', healthCheck);
 
+// Swagger UI (API Documentation)
+if (swaggerDocument) {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'SafeAPI-Bridge API Documentation',
+    swaggerOptions: {
+      persistAuthorization: true,
+      displayRequestDuration: true,
+      docExpansion: 'list',
+      filter: true,
+      showExtensions: true,
+      showCommonExtensions: true
+    }
+  }));
+  
+  // Serve raw OpenAPI spec
+  app.get('/api-docs.json', (req, res) => {
+    res.json(swaggerDocument);
+  });
+  
+  app.get('/api-docs.yaml', (req, res) => {
+    res.type('text/yaml').send(YAML.stringify(swaggerDocument, 4));
+  });
+}
+
 // Routes
 app.use('/auth', authRoutes);
 app.use('/api', proxyRoutes);
@@ -110,6 +147,7 @@ const server = app.listen(PORT, () => {
   console.log('\n📋 Available Endpoints:');
   console.log('  GET  /           - Service info');
   console.log('  GET  /health     - Health check');
+  console.log(`  GET  /api-docs   - ${swaggerDocument ? '📚 Swagger UI (API Documentation)' : '❌ Swagger disabled'}`);
   console.log('  POST /auth/token - Generate JWT token (auto-creates user)');
   console.log('  GET  /auth/verify - Verify JWT token');
   console.log('  POST /api/:api/proxy - Proxy to AI API (supports both Server Key & BYOK)');

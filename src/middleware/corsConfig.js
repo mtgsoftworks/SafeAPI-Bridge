@@ -13,6 +13,13 @@ const corsOptions = {
       return callback(null, !!config.allowMobileNoOrigin);
     }
 
+    // Allow localhost origins in development for Swagger UI
+    if (config.nodeEnv === 'development') {
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        return callback(null, true);
+      }
+    }
+
     // Strict exact-match check; ignore wildcard "*" for production hardening
     if (config.allowedOrigins && config.allowedOrigins.length > 0) {
       if (config.allowedOrigins.indexOf(origin) !== -1) {
@@ -31,7 +38,9 @@ const corsOptions = {
     'X-Requested-With',
     'Accept',
     'Origin',
-    'X-Admin-Key'
+    'X-Admin-Key',
+    'X-Partial-Key-Id',
+    'X-Partial-Key'
   ]
 };
 

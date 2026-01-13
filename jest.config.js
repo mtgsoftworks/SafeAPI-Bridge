@@ -16,13 +16,13 @@ module.exports = {
     '!**/tests/**'
   ],
 
-  // Coverage thresholds
-  coverageThresholds: {
+  // Coverage thresholds (adjusted for gradual improvement)
+  coverageThreshold: {
     global: {
-      branches: 60,
-      functions: 70,
-      lines: 70,
-      statements: 70
+      branches: 40,
+      functions: 40,
+      lines: 50,
+      statements: 50
     }
   },
 

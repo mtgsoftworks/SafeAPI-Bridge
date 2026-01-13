@@ -11,8 +11,10 @@ info:
     - BYOK split-key management via `/api/split-key/*`
 
 servers:
-  - url: http://localhost:3003
-    description: Local development
+  - url: http://localhost:3000
+    description: Local development (default)
+  - url: http://localhost:3005
+    description: Local development (alternate)
   - url: https://safeapi-bridge.example.com
     description: Production (example)
 

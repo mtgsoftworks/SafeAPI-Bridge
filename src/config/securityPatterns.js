@@ -32,15 +32,14 @@ const SECURITY_PATTERNS = {
     /\.\.%c1%9c/gi
   ],
 
-  // Command injection patterns
+  // Command injection patterns (relaxed for API proxy - no {} or [] blocking)
   COMMAND_INJECTION: [
-    /[;&|`$(){}[\]]+/g,
-    /wget\s+/gi,
-    /curl\s+/gi,
-    /nc\s+/gi,
-    /netcat\s+/gi,
-    /\|\s*sh/gi,
-    /\|\s*bash/gi
+    /[;&|`]+/g,
+    /wget\s+http/gi,
+    /curl\s+http/gi,
+    /\bnetcat\b/gi,
+    /\|\s*sh\b/gi,
+    /\|\s*bash\b/gi
   ],
 
   // LDAP injection patterns

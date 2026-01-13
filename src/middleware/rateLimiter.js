@@ -1,5 +1,6 @@
 const rateLimit = require('express-rate-limit');
 const config = require('../config/env');
+const { RATE_LIMITING } = require('../config/constants');
 
 /**
  * Rate Limiter Configuration
@@ -26,8 +27,8 @@ const limiter = rateLimit({
  * More restrictive to prevent brute force attacks
  */
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per windowMs
+  windowMs: RATE_LIMITING.AUTH_WINDOW_MS,
+  max: RATE_LIMITING.AUTH_MAX_REQUESTS,
   message: {
     error: 'Too many authentication attempts',
     message: 'Too many attempts from this IP, please try again later',

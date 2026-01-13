@@ -1,6 +1,17 @@
 // Allowed endpoints configuration for each API
 // This whitelist ensures only specific endpoints can be accessed through the proxy
 
+/**
+ * Centralized list of supported API providers
+ * Single source of truth for all API references
+ */
+const SUPPORTED_APIS = [
+  'openai', 'gemini', 'claude', 'groq', 'mistral', 'zai',
+  'deepseek', 'perplexity', 'together', 'openrouter', 'fireworks',
+  'github', 'replicate', 'stability', 'fal', 'elevenlabs',
+  'brave', 'deepl', 'openmeteo'
+];
+
 const allowedEndpoints = {
   openai: [
     '/chat/completions',
@@ -242,6 +253,7 @@ const isEndpointAllowed = (api, endpoint) => {
 };
 
 module.exports = {
+  SUPPORTED_APIS,
   allowedEndpoints,
   apiHeaders,
   isEndpointAllowed

@@ -3,6 +3,7 @@ const helmet = require('helmet');
 const config = require('./config/env');
 
 // Middleware
+const requestIdMiddleware = require('./middleware/requestId');
 const corsConfig = require('./middleware/corsConfig');
 const logger = require('./middleware/logger');
 const { limiter } = require('./middleware/rateLimiter');
@@ -10,6 +11,8 @@ const { errorMiddleware, notFoundHandler } = require('./utils/errorHandler');
 const { securityMonitor } = require('./middleware/securityMonitor');
 const httpsEnforcement = require('./middleware/httpsEnforcement');
 const requestTimeout = require('./middleware/requestTimeout');
+const { inputSanitizer } = require('./middleware/inputSanitizer');
+const { smartCompression } = require('./middleware/compression');
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -27,6 +30,12 @@ app.set('trust proxy', 1);
 
 // Remove X-Powered-By header
 app.disable('x-powered-by');
+
+// Request ID middleware (must be first for proper correlation)
+app.use(requestIdMiddleware);
+
+// Apply compression early (before security headers)
+app.use(smartCompression);
 
 // Security middleware with HSTS
 app.use(helmet({
@@ -50,6 +59,9 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // Request timeout protection
 app.use(requestTimeout);
+
+// Input sanitization (after body parsing, before other processing)
+app.use(inputSanitizer);
 
 // Logging
 app.use(logger);

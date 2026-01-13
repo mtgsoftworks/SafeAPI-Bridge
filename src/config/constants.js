@@ -1,0 +1,125 @@
+/**
+ * Application Constants
+ * Centralized configuration for magic numbers and thresholds
+ */
+
+// Security Constants
+const SECURITY = {
+  FAILED_AUTH_THRESHOLD: 5,
+  FAILED_AUTH_WINDOW: 15 * 60 * 1000, // 15 minutes (legacy name support)
+  FAILED_AUTH_WINDOW_MS: 15 * 60 * 1000, // 15 minutes
+  BRUTE_FORCE_CLEANUP_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes
+  MAX_CONTENT_LENGTH_BYTES: 5 * 1024 * 1024, // 5MB
+  IP_LOCKOUT_THRESHOLD: 5,
+  IP_LOCKOUT_WINDOW_MS: 15 * 60 * 1000, // 15 minutes
+  SUSPICIOUS_ACTIVITY_THRESHOLD: 10,
+  SUSPICIOUS_ACTIVITY_WINDOW_MS: 10 * 60 * 1000, // 10 minutes
+  LRU_CACHE_MAX_ENTRIES: 10000,
+  SUSPICIOUS_CACHE_MAX_ENTRIES: 5000
+};
+
+// Performance Constants
+const PERFORMANCE = {
+  DEFAULT_REQUEST_TIMEOUT_MS: 30000, // 30 seconds
+  LIGHT_MODE_TIMEOUT_MS: 30000,
+  NORMAL_MODE_TIMEOUT_MS: 60000,
+  MEMORY_MONITOR_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes
+  SERVER_KEEP_ALIVE_TIMEOUT_MS: 60000, // 60 seconds
+  SERVER_HEADERS_TIMEOUT_MS: 65000,
+  GRACEFUL_SHUTDOWN_TIMEOUT_MS: 15000
+};
+
+// Database Constants
+const DATABASE = {
+  CONNECTION_POOL_MAX: 20,
+  CONNECTION_POOL_MIN: 5,
+  QUERY_TIMEOUT_MS: 10000,
+  IDLE_TIMEOUT_MS: 30000
+};
+
+// Rate Limiting Constants
+const RATE_LIMITING = {
+  DEFAULT_WINDOW_MS: 3600000, // 1 hour
+  DEFAULT_MAX_REQUESTS: 100,
+  AUTH_WINDOW_MS: 15 * 60 * 1000, // 15 minutes
+  AUTH_MAX_REQUESTS: 10
+};
+
+// Usage & Quota Constants
+const USAGE = {
+  DAILY_QUOTA_DEFAULT: 1000,
+  MONTHLY_QUOTA_DEFAULT: 10000,
+  USAGE_THRESHOLD_PERCENTAGE: 0.8, // 80%
+  COST_ESTIMATION_MULTIPLIERS: {
+    openai: 0.01, // $0.01 per 1K tokens
+    gemini: 0.0005,
+    claude: 0.008,
+    default: 0.001 // Generic for other providers
+  }
+};
+
+// Crypto Constants
+const CRYPTO = {
+  ALGORITHM: 'aes-256-gcm',
+  KEY_LENGTH_BYTES: 32,
+  IV_LENGTH_BYTES: 16,
+  TAG_LENGTH_BYTES: 16
+};
+
+// Logging Constants
+const LOGGING = {
+  MAX_FILE_SIZE: '20m',
+  MAX_FILES: '14d',
+  ERROR_MAX_FILES: '30d',
+  SECURITY_MAX_FILES: '90d',
+  LOG_LEVEL_DEFAULT: 'info',
+  LOG_LEVEL_LIGHT_MODE: 'warn'
+};
+
+// Validation Constants
+const VALIDATION = {
+  MIN_USER_ID_LENGTH: 3,
+  MIN_APP_ID_LENGTH: 3,
+  MAX_REQUEST_BODY_SIZE: '2mb',
+  MAX_REQUEST_BODY_BYTES: 10 * 1024 * 1024, // 10MB
+  MAX_OBJECT_DEPTH: 10,
+  MAX_ENDPOINT_LENGTH: 1000,
+  MAX_USER_ID_LENGTH: 100,
+  MAX_APP_ID_LENGTH: 100,
+  MAX_METADATA_SIZE: 10000, // 10KB
+  MIN_SPLIT_KEY_ID_LENGTH: 8,
+  MIN_SPLIT_KEY_PART_LENGTH: 16
+};
+
+// Health Check Constants
+const HEALTH_CHECK = {
+  LIGHT_MODE: true,
+  DATABASE_TIMEOUT_MS: 5000
+};
+
+// Cache Constants
+const CACHE = {
+  DEFAULT_TTL: 300, // 5 minutes
+  SHORT_TTL: 60, // 1 minute
+  LONG_TTL: 3600, // 1 hour
+  WARMUP_TTL: 1800, // 30 minutes
+  MAX_KEY_LENGTH: 250,
+  MAX_VALUE_SIZE: 1024 * 1024, // 1MB
+  PREFIX: 'safeapi:',
+  USER_PREFIX: 'user:',
+  API_PREFIX: 'api:',
+  QUOTA_PREFIX: 'quota:'
+};
+
+module.exports = {
+  SECURITY,
+  PERFORMANCE,
+  DATABASE,
+  RATE_LIMITING,
+  USAGE,
+  CRYPTO,
+  LOGGING,
+  VALIDATION,
+  HEALTH_CHECK,
+  CACHE
+};

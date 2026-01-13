@@ -39,3 +39,4 @@ coverage/
 *.db
 *.db-journal
 prisma/migrations/
+nul

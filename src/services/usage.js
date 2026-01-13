@@ -1,6 +1,8 @@
 const UsageModel = require('../models/Usage');
 const UserModel = require('../models/User');
 const webhookService = require('./webhook');
+const { USAGE } = require('../config/constants');
+const { logger } = require('../utils/securityLogger');
 
 /**
  * Usage Tracking Service
@@ -55,7 +57,7 @@ class UsageTrackingService {
 
       return { tokensUsed, estimatedCost };
     } catch (error) {
-      console.error('Usage tracking error:', error);
+      logger.error('Usage tracking error', { error: error.message, userId, api });
     }
   }
 
@@ -74,22 +76,19 @@ class UsageTrackingService {
       // OpenAI
       if (api === 'openai' && responseData.usage) {
         tokensUsed = responseData.usage.total_tokens || 0;
-        // GPT-3.5: $0.002/1K tokens, GPT-4: $0.03/1K tokens (average estimate)
-        estimatedCost = (tokensUsed / 1000) * 0.01;
+        estimatedCost = (tokensUsed / 1000) * USAGE.COST_ESTIMATION_MULTIPLIERS.openai;
       }
 
       // Gemini
       if (api === 'gemini' && responseData.usageMetadata) {
         tokensUsed = responseData.usageMetadata.totalTokenCount || 0;
-        // Gemini Pro: ~$0.0005/1K tokens
-        estimatedCost = (tokensUsed / 1000) * 0.0005;
+        estimatedCost = (tokensUsed / 1000) * USAGE.COST_ESTIMATION_MULTIPLIERS.gemini;
       }
 
       // Claude
       if (api === 'claude' && responseData.usage) {
         tokensUsed = (responseData.usage.input_tokens || 0) + (responseData.usage.output_tokens || 0);
-        // Claude: ~$0.008/1K tokens (average)
-        estimatedCost = (tokensUsed / 1000) * 0.008;
+        estimatedCost = (tokensUsed / 1000) * USAGE.COST_ESTIMATION_MULTIPLIERS.claude;
       }
 
       // Groq, Mistral and other OpenAI-like providers
@@ -98,10 +97,10 @@ class UsageTrackingService {
         responseData.usage
       ) {
         tokensUsed = responseData.usage.total_tokens || 0;
-        estimatedCost = (tokensUsed / 1000) * 0.001; // Usually cheaper
+        estimatedCost = (tokensUsed / 1000) * USAGE.COST_ESTIMATION_MULTIPLIERS.default;
       }
     } catch (error) {
-      console.error('Cost estimation error:', error);
+      logger.error('Cost estimation error', { error: error.message, api });
     }
 
     return { tokensUsed, estimatedCost };
@@ -119,7 +118,7 @@ class UsageTrackingService {
         }
       });
     } catch (error) {
-      console.error('Update user cost error:', error);
+      logger.error('Update user cost error', { error: error.message, userId });
     }
   }
 
@@ -130,29 +129,31 @@ class UsageTrackingService {
     try {
       const user = await UserModel.findByUserId(userId);
 
-      // Check if reaching 80% of daily quota
-      if (user.requestsToday >= user.dailyQuota * 0.8 && user.requestsToday < user.dailyQuota * 0.81) {
+      // Check if reaching threshold percentage of daily quota
+      const dailyThreshold = user.dailyQuota * USAGE.USAGE_THRESHOLD_PERCENTAGE;
+      if (user.requestsToday >= dailyThreshold && user.requestsToday < dailyThreshold + 1) {
         await webhookService.trigger('usage.high', {
           userId: user.userId,
           type: 'daily',
           usage: user.requestsToday,
           quota: user.dailyQuota,
-          percentage: (user.requestsToday / user.dailyQuota * 100).toFixed(2)
+          percentage: (USAGE.USAGE_THRESHOLD_PERCENTAGE * 100).toFixed(1)
         });
       }
 
-      // Check if reaching 80% of monthly quota
-      if (user.requestsMonth >= user.monthlyQuota * 0.8 && user.requestsMonth < user.monthlyQuota * 0.81) {
+      // Check if reaching threshold percentage of monthly quota
+      const monthlyThreshold = user.monthlyQuota * USAGE.USAGE_THRESHOLD_PERCENTAGE;
+      if (user.requestsMonth >= monthlyThreshold && user.requestsMonth < monthlyThreshold + 1) {
         await webhookService.trigger('usage.high', {
           userId: user.userId,
           type: 'monthly',
           usage: user.requestsMonth,
           quota: user.monthlyQuota,
-          percentage: (user.requestsMonth / user.monthlyQuota * 100).toFixed(2)
+          percentage: (USAGE.USAGE_THRESHOLD_PERCENTAGE * 100).toFixed(1)
         });
       }
     } catch (error) {
-      console.error('Check usage thresholds error:', error);
+      logger.error('Check usage thresholds error', { error: error.message, userId });
     }
   }
 }

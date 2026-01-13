@@ -1,12 +1,30 @@
 require('dotenv').config();
 
+// Determine environment first (before config object)
+const nodeEnv = process.env.NODE_ENV || 'development';
+const isProduction = nodeEnv === 'production';
+
+// Validate JWT secret before config initialization
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (isProduction) {
+      throw new Error('JWT_SECRET environment variable is REQUIRED in production');
+    }
+    console.warn('⚠️  WARNING: Using default JWT secret for development only. Set JWT_SECRET in production!');
+    return 'development-secret-change-before-production';
+  }
+  return secret;
+};
+
 const config = {
   // Server
   port: process.env.PORT || 3000,
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
+  isProduction,
 
   // JWT
-  jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
+  jwtSecret: getJwtSecret(),
   jwtExpiresIn: '7d',
 
   // OpenAI
@@ -142,9 +160,11 @@ const validateConfig = () => {
   const requiredVars = ['JWT_SECRET'];
   const missing = requiredVars.filter(key => !process.env[key]);
 
-  if (missing.length > 0 && config.nodeEnv === 'production') {
-    // In production, JWT secret must be provided
-    throw new Error(`Missing required environment variables in production: ${missing.join(', ')}`);
+  if (missing.length > 0) {
+    if (isProduction) {
+      throw new Error(`CRITICAL: Missing required environment variables in production: ${missing.join(', ')}`);
+    }
+    console.warn(`⚠️  WARNING: Missing optional environment variables: ${missing.join(', ')}`);
   }
 
   // Check if at least one API key is configured

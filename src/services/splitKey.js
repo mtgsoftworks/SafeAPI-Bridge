@@ -1,18 +1,24 @@
 const crypto = require('crypto');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../db/client');
+const { CRYPTO, VALIDATION } = require('../config/constants');
+const { logger } = require('../utils/securityLogger');
 
 /**
  * Split Key Service for BYOK (Bring Your Own Key) functionality
  * Handles cryptographic operations for key splitting and reconstruction
+ * Uses DI pattern for database client
  */
 
 class SplitKeyService {
-  constructor() {
-    this.prisma = new PrismaClient();
-    this.algorithm = 'aes-256-gcm';
-    this.keyLength = 32; // 256 bits
-    this.ivLength = 16; // 128 bits
-    this.tagLength = 16; // 128 bits
+  /**
+   * @param {PrismaClient} prismaClient - Prisma client instance (optional, uses singleton if not provided)
+   */
+  constructor(prismaClient = null) {
+    this.prisma = prismaClient || prisma;
+    this.algorithm = CRYPTO.ALGORITHM;
+    this.keyLength = CRYPTO.KEY_LENGTH_BYTES;
+    this.ivLength = CRYPTO.IV_LENGTH_BYTES;
+    this.tagLength = CRYPTO.TAG_LENGTH_BYTES;
   }
 
   /**
@@ -261,14 +267,14 @@ class SplitKeyService {
     }
 
     // Basic format validation
-    if (typeof keyId !== 'string' || keyId.length < 8) {
+    if (typeof keyId !== 'string' || keyId.length < VALIDATION.MIN_SPLIT_KEY_ID_LENGTH) {
       return {
         valid: false,
         error: 'Invalid X-Partial-Key-Id format'
       };
     }
 
-    if (typeof clientPart !== 'string' || clientPart.length < 16) {
+    if (typeof clientPart !== 'string' || clientPart.length < VALIDATION.MIN_SPLIT_KEY_PART_LENGTH) {
       return {
         valid: false,
         error: 'Invalid X-Partial-Key format'
@@ -283,10 +289,14 @@ class SplitKeyService {
   }
 
   /**
-   * Cleanup database connection
+   * Cleanup database connection (only if using custom prisma instance)
+   * @deprecated Singleton prisma client handles cleanup automatically
    */
   async disconnect() {
-    await this.prisma.$disconnect();
+    // Only disconnect if using a custom (non-singleton) prisma instance
+    if (this.prisma !== prisma) {
+      await this.prisma.$disconnect();
+    }
   }
 }
 

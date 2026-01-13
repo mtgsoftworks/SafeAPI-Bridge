@@ -82,121 +82,37 @@ router.get(
 
 /**
  * Convenience routes for specific APIs
- * These make it easier to use without specifying the API in the path
+ * Dynamically generated to eliminate code duplication
  */
 
-// OpenAI
-router.post('/openai', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'openai';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+// List of supported APIs for convenience routes
+const supportedApis = [
+  'openai', 'gemini', 'claude', 'groq', 'mistral', 'zai', 'deepseek',
+  'perplexity', 'together', 'openrouter', 'fireworks', 'github', 'replicate',
+  'stability', 'fal', 'elevenlabs', 'brave', 'deepl', 'openmeteo'
+];
 
-// Gemini
-router.post('/gemini', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'gemini';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+// Middleware factory for API convenience routes
+const createApiRoute = (apiName) => {
+  return [
+    ipCheck,
+    authenticateToken,
+    quotaCheck,
+    validateSplitKey,
+    reconstructApiKey,
+    (req, res, next) => {
+      req.params.api = apiName;
+      next();
+    },
+    validateProxyRequest,
+    addSplitKeySecurityHeaders,
+    asyncHandler(proxyRequest)
+  ];
+};
 
-// Claude
-router.post('/claude', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'claude';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// Groq
-router.post('/groq', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'groq';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// Mistral
-router.post('/mistral', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'mistral';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// Z.ai (GLM-4.6 and similar models)
-router.post('/zai', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'zai';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// DeepSeek
-router.post('/deepseek', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'deepseek';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// Perplexity
-router.post('/perplexity', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'perplexity';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// Together AI
-router.post('/together', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'together';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// OpenRouter
-router.post('/openrouter', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'openrouter';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// Fireworks AI
-router.post('/fireworks', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'fireworks';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// GitHub Models
-router.post('/github', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'github';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// Replicate
-router.post('/replicate', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'replicate';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// Stability AI
-router.post('/stability', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'stability';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// Fal AI
-router.post('/fal', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'fal';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// ElevenLabs
-router.post('/elevenlabs', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'elevenlabs';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// Brave Search
-router.post('/brave', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'brave';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// DeepL
-router.post('/deepl', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'deepl';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
-
-// Open-Meteo
-router.post('/openmeteo', ipCheck, authenticateToken, quotaCheck, validateSplitKey, reconstructApiKey, (req, res, next) => {
-  req.params.api = 'openmeteo';
-  next();
-}, validateProxyRequest, addSplitKeySecurityHeaders, asyncHandler(proxyRequest));
+// Generate convenience routes dynamically
+supportedApis.forEach(api => {
+  router.post(`/${api}`, createApiRoute(api));
+});
 
 module.exports = router;

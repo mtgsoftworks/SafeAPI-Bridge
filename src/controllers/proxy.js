@@ -1,19 +1,19 @@
-const axios = require('axios');
 const config = require('../config/env');
-const { isEndpointAllowed, apiHeaders } = require('../config/apis');
+const { isEndpointAllowed, SUPPORTED_APIS } = require('../config/apis');
 const { handleProxyError } = require('../utils/errorHandler');
 const { validateEndpoint, sanitizeBody } = require('../utils/validator');
 const UsageTrackingService = require('../services/usage');
+const KeyResolutionService = require('../services/keyResolution');
+const ApiForwardingService = require('../services/apiForwarding');
 const webhookService = require('../services/webhook');
-const { logSecurityEvent } = require('../utils/securityLogger');
+const { logger } = require('../utils/securityLogger');
 const prisma = require('../db/client');
-const { decryptKey } = require('../utils/crypto');
 
 /**
  * Main Proxy Controller
  * Forwards requests to external AI APIs while hiding API keys
  * Supports both Server Key and BYOK Split Key methods
- * Now with usage tracking and analytics
+ * Refactored to use separate services for better SRP compliance
  */
 
 /**
@@ -28,10 +28,12 @@ const proxyRequest = async (req, res) => {
     const isGet = req.method === 'GET';
     const endpoint = (req.body && req.body.endpoint) || req.query.endpoint;
     const requestData = sanitizeBody(req.body || {});
+    const isLightMode = process.env.LIGHT_MODE === 'true';
 
     // Get user from middleware (set by auth + quota check)
     const userId = req.user.userId;
     const authMethod = req.authMethod || 'SERVER_KEY';
+    const ip = req.clientIp || req.ip || 'unknown';
 
     // Remove endpoint from body if it exists
     delete requestData.endpoint;
@@ -54,143 +56,65 @@ const proxyRequest = async (req, res) => {
       });
     }
 
-    // Determine API key based on headers (BYOK Split Key) or server config
-    let apiKey;
-    let keySource;
+    // Resolve API key using KeyResolutionService
+    const keyResult = await KeyResolutionService.resolveApiKey({
+      api,
+      headers: req.headers,
+      userId,
+      ip
+    });
 
-    const partialKeyId = req.headers['x-partial-key-id'];
-    const clientPart = req.headers['x-partial-key'];
-
-    if (partialKeyId && clientPart) {
-      // Method B: BYOK Split Key using database + crypto
-      try {
-        const splitKeyRecord = await prisma.splitKey.findUnique({
-          where: { keyId: partialKeyId }
-        });
-
-        if (!splitKeyRecord || !splitKeyRecord.active) {
-          return res.status(401).json({
-            error: 'Invalid X-Partial-Key-Id',
-            message: 'Split key not found or inactive'
-          });
-        }
-
-        if (splitKeyRecord.clientPart !== clientPart) {
-          return res.status(401).json({
-            error: 'Invalid Split Key',
-            message: 'Invalid X-Partial-Key or X-Partial-Key-Id combination'
-          });
-        }
-
-        try {
-          apiKey = decryptKey(
-            splitKeyRecord.serverPart,
-            splitKeyRecord.decryptionSecret,
-            splitKeyRecord.apiProvider,
-            clientPart
-          );
-        } catch (decryptError) {
-          console.error('Failed to decrypt API key:', decryptError);
-          return res.status(401).json({
-            error: 'Failed to decrypt API key',
-            message: 'Unable to reconstruct API key from split parts'
-          });
-        }
-
-        keySource = 'BYOK_SPLIT_KEY';
-
-        // Log successful BYOK usage
-        logSecurityEvent('byok_key_used', userId, req.ip, {
-          api,
-          endpoint,
-          keyId: splitKeyRecord.keyId
-        });
-      } catch (dbError) {
-        console.error('Split key lookup error:', dbError);
-        return res.status(500).json({
-          error: 'Split Key Lookup Failed',
-          message: 'Unable to validate split key'
-        });
-      }
-    } else {
-      // Method A: Server Key from configuration / .env
-      const apiConfig = config[api];
-      if (!apiConfig || !apiConfig.apiKey) {
-        return res.status(503).json({
-          error: 'Service Not Available',
-          message: `${api.toUpperCase()} API is not configured. Please add the API key to .env file`,
-          api,
-          authMethod: 'SERVER_KEY'
-        });
-      }
-      apiKey = apiConfig.apiKey;
-      keySource = 'SERVER_KEY';
+    if (!keyResult.success) {
+      return res.status(keyResult.status).json({
+        error: keyResult.error,
+        message: keyResult.message,
+        api,
+        authMethod
+      });
     }
 
-    // Build request URL
-    let targetUrl = `${config[api].baseUrl}${endpoint}`;
+    const { apiKey, keySource, keyId } = keyResult;
 
-    // Special handling for Gemini (API key in query parameter)
-    if (api === 'gemini') {
-      const separator = targetUrl.includes('?') ? '&' : '?';
-      targetUrl = `${targetUrl}${separator}key=${apiKey}`;
-    }
+    // Build target URL
+    const targetUrl = KeyResolutionService.buildTargetUrl(api, endpoint, apiKey);
 
-    // Prepare headers
-    const headers = apiHeaders[api](apiKey);
-
-    // Log the proxied request with authentication method
-    console.log(`🔄 Proxying ${req.method} request to ${api.toUpperCase()}: ${endpoint} (${keySource})`);
-
-    if (authMethod === 'BYOK_SPLIT_KEY') {
-      console.log(`🔐 BYOK Mode: Using split key ${req.splitKey?.keyId} for user ${userId}`);
-    }
-
-    // Determine streaming
-    const acceptHeader = req.headers['accept'] || '';
-    const wantsStream = acceptHeader.includes('text/event-stream') || requestData.stream === true;
-
-    // Prepare axios config
-    const timeoutMs = parseInt(process.env.UPSTREAM_TIMEOUT_MS || '0') || (process.env.LIGHT_MODE === 'true' ? 30000 : 60000);
-    const axiosConfig = {
+    // Log the proxied request
+    logger.info('Proxying request', {
+      api,
+      endpoint,
       method: req.method,
-      url: targetUrl,
-      headers: {
-        ...headers,
-        ...(req.headers['user-agent'] && { 'User-Agent': req.headers['user-agent'] })
-      },
-      timeout: timeoutMs,
-      validateStatus: (status) => status < 600,
-      ...(wantsStream && { responseType: 'stream' })
-    };
+      keySource,
+      userId,
+      keyId: keyId || null
+    });
 
-    // For GET requests, pass remaining query params through (excluding endpoint)
+    // Check if streaming is requested
+    const wantsStream = ApiForwardingService.isStreamRequested(req.headers, requestData);
+
+    // Prepare query params for GET requests
+    let queryParams = null;
     if (isGet) {
       const { endpoint: _ep, ...queryRest } = req.query || {};
-      // For Gemini, API key already appended; include other query params
-      axiosConfig.params = queryRest;
-    } else {
-      axiosConfig.data = requestData;
+      queryParams = queryRest;
     }
 
-    // Make the request to external API
-    const response = await axios(axiosConfig);
+    // Forward request using ApiForwardingService
+    const { response, responseTime, success } = await ApiForwardingService.forwardRequest({
+      api,
+      targetUrl,
+      method: req.method,
+      apiKey,
+      requestData: isGet ? null : requestData,
+      headers: req.headers,
+      wantsStream,
+      isLightMode,
+      queryParams
+    });
 
-    const responseTime = Date.now() - startTime;
-    const success = response.status >= 200 && response.status < 400;
-
-    if (wantsStream && response.data && typeof response.data.pipe === 'function') {
-      // Forward streaming response
-      res.status(response.status);
-      // Ensure SSE headers if upstream didn't set properly
-      if (!res.getHeader('Content-Type')) {
-        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-
-      // Track usage without tokens (unknown for stream)
-      UsageTrackingService.trackRequest({
+    // Handle streaming response
+    if (wantsStream && ApiForwardingService.isStreamableResponse(response)) {
+      // Track usage asynchronously (without token count for streams)
+      trackUsageAsync({
         userId,
         api,
         endpoint,
@@ -200,17 +124,14 @@ const proxyRequest = async (req, res) => {
         responseTime,
         req,
         responseData: null,
-        metadata: {
-          authMethod,
-          keySource,
-          ...(authMethod === 'BYOK_SPLIT_KEY' && { keyId: req.splitKey?.keyId })
-        }
-      }).catch(err => console.error('Usage tracking error:', err));
+        keySource,
+        keyId
+      });
 
-      response.data.pipe(res);
+      ApiForwardingService.sendStreamResponse(res, response);
     } else {
-      // Track usage (async, don't wait)
-      UsageTrackingService.trackRequest({
+      // Track usage asynchronously
+      trackUsageAsync({
         userId,
         api,
         endpoint,
@@ -220,46 +141,78 @@ const proxyRequest = async (req, res) => {
         responseTime,
         req,
         responseData: response.data,
-        metadata: {
-          authMethod,
-          keySource,
-          ...(authMethod === 'BYOK_SPLIT_KEY' && { keyId: req.splitKey?.keyId })
-        }
-      }).catch(err => console.error('Usage tracking error:', err));
+        keySource,
+        keyId
+      });
 
       // Forward the response
       res.status(response.status).json(response.data);
     }
 
   } catch (error) {
-    const responseTime = Date.now() - startTime;
-    const errorResponse = handleProxyError(error, req.params.api);
+    handleProxyError(error, req, res, startTime);
+  }
+};
 
-    // Track failed request
-    if (req.user && req.user.userId) {
+/**
+ * Track usage asynchronously (fire and forget)
+ * @private
+ */
+const trackUsageAsync = ({ userId, api, endpoint, method, statusCode, success, responseTime, req, responseData, keySource, keyId }) => {
+  setImmediate(() => {
+    UsageTrackingService.trackRequest({
+      userId,
+      api,
+      endpoint,
+      method,
+      statusCode,
+      success,
+      responseTime,
+      req,
+      responseData,
+      metadata: {
+        authMethod: keySource === 'BYOK_SPLIT_KEY' ? 'BYOK_SPLIT_KEY' : 'SERVER_KEY',
+        keySource,
+        ...(keyId && { keyId })
+      }
+    }).catch(err => logger.error('Usage tracking error', { error: err.message }));
+  });
+};
+
+/**
+ * Handle proxy errors
+ * @private
+ */
+const handleProxyErrorInternal = (error, req, res, startTime) => {
+  const responseTime = Date.now() - startTime;
+  const errorResponse = handleProxyError(error, req.params.api);
+
+  // Track failed request asynchronously
+  if (req.user && req.user.userId) {
+    setImmediate(() => {
       UsageTrackingService.trackRequest({
         userId: req.user.userId,
         api: req.params.api,
-        endpoint: req.body.endpoint || req.query.endpoint || '/unknown',
+        endpoint: req.body?.endpoint || req.query?.endpoint || '/unknown',
         method: req.method,
         statusCode: errorResponse.status,
         success: false,
         responseTime,
         req
-      }).catch(err => console.error('Usage tracking error:', err));
+      }).catch(err => logger.error('Usage tracking error', { error: err.message }));
+    });
 
-      // Trigger error webhook
-      webhookService.trigger('api.error', {
-        userId: req.user.userId,
-        api: req.params.api,
-        endpoint: req.body.endpoint,
-        error: errorResponse.message,
-        statusCode: errorResponse.status
-      }).catch(err => console.error('Webhook error:', err));
-    }
-
-    res.status(errorResponse.status).json(errorResponse);
+    // Trigger error webhook
+    webhookService.trigger('api.error', {
+      userId: req.user.userId,
+      api: req.params.api,
+      endpoint: req.body?.endpoint,
+      error: errorResponse.message,
+      statusCode: errorResponse.status
+    }).catch(err => logger.error('Webhook error', { error: err.message }));
   }
+
+  res.status(errorResponse.status).json(errorResponse);
 };
 
 /**
@@ -297,29 +250,11 @@ const getAvailableEndpoints = (req, res) => {
  * Tests database connectivity
  */
 const healthCheck = async (req, res) => {
+  // Use centralized API list from config
+  const apis = SUPPORTED_APIS;
+
   // Light mode: keep health check extremely cheap and always HTTP 200
   if (process.env.LIGHT_MODE === 'true') {
-    const apis = [
-      'openai',
-      'gemini',
-      'claude',
-      'groq',
-      'mistral',
-      'zai',
-      'deepseek',
-      'perplexity',
-      'together',
-      'openrouter',
-      'fireworks',
-      'github',
-      'replicate',
-      'stability',
-      'fal',
-      'elevenlabs',
-      'brave',
-      'deepl',
-      'openmeteo'
-    ];
     const status = {};
     apis.forEach(api => {
       const apiConfig = config[api];
@@ -341,27 +276,6 @@ const healthCheck = async (req, res) => {
     });
   }
 
-  const apis = [
-    'openai',
-    'gemini',
-    'claude',
-    'groq',
-    'mistral',
-    'zai',
-    'deepseek',
-    'perplexity',
-    'together',
-    'openrouter',
-    'fireworks',
-    'github',
-    'replicate',
-    'stability',
-    'fal',
-    'elevenlabs',
-    'brave',
-    'deepl',
-    'openmeteo'
-  ];
   const status = {};
 
   apis.forEach(api => {
@@ -378,14 +292,13 @@ const healthCheck = async (req, res) => {
   let dbStatus = 'unknown';
   let dbLatency = 0;
   try {
-    const prisma = require('../db/client');
     const start = Date.now();
     await prisma.$queryRaw`SELECT 1`;
     dbLatency = Date.now() - start;
     dbStatus = 'connected';
   } catch (error) {
     dbStatus = 'error';
-    console.error('Database health check failed:', error.message);
+    logger.error('Database health check failed', { error: error.message });
   }
 
   // Overall health status

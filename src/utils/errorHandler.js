@@ -1,3 +1,7 @@
+const { isOperationalError } = require('./errorTypes');
+const { createErrorResponse, sendError } = require('./responseFormatter');
+const { logger } = require('./securityLogger');
+
 /**
  * Centralized Error Handling
  * Handles errors from proxy requests and general application errors
@@ -42,14 +46,31 @@ const handleProxyError = (error, api) => {
  * Express error handling middleware
  */
 const errorMiddleware = (err, req, res, next) => {
-  console.error('Error:', err);
+  logger.error('Error caught by middleware', { error: err.message, path: req.path });
 
   // Handle CORS rejections explicitly with 403 JSON
   if (err && err.message === 'Not allowed by CORS') {
-    return res.status(403).json({
-      error: 'CORS Forbidden',
+    const corsError = {
+      code: 'CORS_FORBIDDEN',
       message: 'Origin is not allowed by CORS policy',
-      origin: req.headers.origin || null
+      details: { origin: req.headers.origin || null }
+    };
+    return sendError(res, corsError, 403);
+  }
+
+  // Determine if this is an operational error
+  const isOperational = isOperationalError(err);
+
+  // Log non-operational errors more severely
+  if (!isOperational) {
+    logger.error('Non-operational error', {
+      error: err.message,
+      stack: err.stack,
+      url: req.originalUrl,
+      method: req.method,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      requestId: req.requestId
     });
   }
 
@@ -57,23 +78,41 @@ const errorMiddleware = (err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
 
-  res.status(statusCode).json({
-    error: err.name || 'Error',
-    message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+  // Create standardized error object
+  const errorObj = {
+    code: err.code || 'INTERNAL_ERROR',
+    message: process.env.NODE_ENV === 'production' && !isOperational
+      ? 'An unexpected error occurred'
+      : message
+  };
+
+  // Include details for operational errors
+  if (isOperational && err.details && Object.keys(err.details).length > 0) {
+    errorObj.details = err.details;
+  }
+
+  // Include stack trace in development
+  if (process.env.NODE_ENV === 'development' && err.stack) {
+    errorObj.stack = err.stack;
+  }
+
+  sendError(res, errorObj, statusCode);
 };
 
 /**
  * Handle 404 Not Found
  */
 const notFoundHandler = (req, res) => {
-  res.status(404).json({
-    error: 'Not Found',
+  const notFoundError = {
+    code: 'NOT_FOUND',
     message: 'The requested endpoint does not exist',
-    path: req.originalUrl,
-    method: req.method
-  });
+    details: {
+      path: req.originalUrl,
+      method: req.method
+    }
+  };
+
+  sendError(res, notFoundError, 404);
 };
 
 /**

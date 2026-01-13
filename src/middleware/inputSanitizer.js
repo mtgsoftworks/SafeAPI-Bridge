@@ -232,9 +232,15 @@ const trackSuspiciousActivity = (ip, activityType) => {
 
 /**
  * Main input sanitization middleware
+ * Note: Proxy routes (/api/:api/proxy) skip HTML escaping to preserve JSON payloads
  */
 const inputSanitizer = (req, res, next) => {
   const ip = req.ip || req.connection.remoteAddress || 'unknown';
+
+  // Skip sanitization for proxy routes - they need raw JSON for AI APIs
+  if (req.path.includes('/proxy') || req.path.includes('/api/')) {
+    return next();
+  }
 
   try {
     // Apply sanitization

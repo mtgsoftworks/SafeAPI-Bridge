@@ -12,12 +12,8 @@ const SANITIZATION_CONFIG = {
   maxStringLength: 10000,
   maxJsonDepth: 10,
 
-  // Blocked patterns
+  // Blocked patterns (relaxed for AI API proxy use)
   blockedPatterns: [
-    // SQL injection patterns
-    /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|CREATE|ALTER|EXEC|EXECUTE)\b)/i,
-    /(\'|\"|;|--|\/\*|\*\/|xp_|sp_)/i,
-
     // XSS patterns
     /<script[^>]*>.*?<\/script>/gi,
     /javascript:/gi,
@@ -27,11 +23,8 @@ const SANITIZATION_CONFIG = {
     /\.\.[\/\\]/g,
     /%2e%2e[\/\\]/gi,
 
-    // NoSQL injection
-    /\{.*\$.*\}/g,
-
-    // Command injection
-    /[;&|`$(){}[\]]/g
+    // NoSQL injection with $ operators
+    /\{\s*["']?\$(?:where|regex|gt|lt|ne|eq|or|and|not|exists|type|mod|text|expr)/gi
   ],
 
   // Allowed content types

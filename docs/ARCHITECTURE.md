@@ -68,13 +68,13 @@ SafeAPI-Bridge is a secure API proxy server designed to protect AI API keys from
 │  │  └────────────────┘  └────────────────┘  └────────────────┘          │  │
 │  │                                                                       │  │
 │  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐          │  │
-│  │  │ UsageTracking  │  │   Analytics    │  │   Webhook      │          │  │
-│  │  │    Service     │  │    Service     │  │   Service      │          │  │
+│  │  │ RequestQueue   │  │ RetryService   │  │   Analytics    │          │  │
+│  │  │ (Bull/Memory)  │  │ (Backoff/CB)   │  │    Service     │          │  │
 │  │  └────────────────┘  └────────────────┘  └────────────────┘          │  │
 │  │                                                                       │  │
 │  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐          │  │
-│  │  │ TokenBlacklist │  │   AuditLog     │  │    Cache       │          │  │
-│  │  │    Service     │  │    Service     │  │   Service      │          │  │
+│  │  │ UsageTracking  │  │   Webhook      │  │    Cache       │          │  │
+│  │  │    Service     │  │   Service      │  │   Service      │          │  │
 │  │  └────────────────┘  └────────────────┘  └────────────────┘          │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                    │                                        │
@@ -98,8 +98,8 @@ SafeAPI-Bridge is a secure API proxy server designed to protect AI API keys from
 │  │  └──────────────────────────────────────────────────────────────┘    │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
+                                     │
+                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         EXTERNAL AI PROVIDERS                               │
 ├────────────┬────────────┬────────────┬────────────┬────────────┬───────────┤
@@ -150,10 +150,12 @@ SafeAPI-Bridge/
 │   │   └── splitKey.js        # Split-key management routes
 │   ├── services/
 │   │   ├── analytics.js       # Analytics service
-│   │   ├── apiForwarding.js   # API forwarding logic
+│   │   ├── apiForwarding.js   # API forwarding with retry/CB
 │   │   ├── auditLog.js        # Audit logging service
-│   │   ├── cacheService.js    # In-memory caching
+│   │   ├── cacheService.js    # Redis/Memory caching
 │   │   ├── keyResolution.js   # API key resolution
+│   │   ├── requestQueue.js    # Bull queue management
+│   │   ├── retryService.js    # Retry & Circuit Breaker logic
 │   │   ├── splitKey.js        # Split-key cryptography
 │   │   ├── tokenBlacklist.js  # JWT blacklist service
 │   │   ├── usage.js           # Usage tracking service
@@ -183,6 +185,7 @@ SafeAPI-Bridge/
 ## Data Models
 
 ### User
+
 Stores application users with quota management.
 
 | Field | Type | Description |
@@ -199,6 +202,7 @@ Stores application users with quota management.
 | active | Boolean | User status |
 
 ### SplitKey
+
 BYOK split-key storage for secure key management.
 
 | Field | Type | Description |
@@ -215,6 +219,7 @@ BYOK split-key storage for secure key management.
 | createdBy | String | Creator user ID |
 
 ### ApiUsage
+
 Request tracking and analytics.
 
 | Field | Type | Description |
@@ -230,6 +235,7 @@ Request tracking and analytics.
 | ipAddress | String | Client IP |
 
 ### IpRule
+
 IP whitelist/blacklist rules.
 
 | Field | Type | Description |
@@ -265,11 +271,15 @@ IP whitelist/blacklist rules.
        ├── ipCheck: Verify IP allowed
        ├── authenticateToken: Verify JWT
        ├── quotaCheck: Verify quota available
-       └── proxyRequest: Forward to OpenAI
+       └── requestQueue: Queue job (if high load/priority)
 
-3. Server → OpenAI API
-   Headers: Authorization: Bearer <SERVER_API_KEY>
-   
+3. Worker/Server → ApiForwardingService
+   └── Execution Flow:
+       ├── KeyResolution: Get API key (server or BYOK)
+       ├── RetryService: Wrapped with exponential backoff
+       ├── CircuitBreaker: Check provider health
+       └── Forward: HTTP call to OpenAI
+    
 4. OpenAI → Server → Client
    └── Response forwarded, usage tracked
 ```

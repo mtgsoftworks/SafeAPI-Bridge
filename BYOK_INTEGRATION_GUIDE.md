@@ -45,6 +45,7 @@ curl -X POST 'https://your-domain.com/api/split-key/split' \
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -222,14 +223,17 @@ print(response['choices'][0]['message']['content'])
 ### Split Key Management
 
 #### Split API Key
+
 ```http
 POST /api/split-key/split
 ```
 
 **Headers:**
+
 - `Authorization: Bearer <JWT_TOKEN>`
 
 **Body:**
+
 ```json
 {
   "originalKey": "sk-your-api-key",
@@ -240,35 +244,43 @@ POST /api/split-key/split
 ```
 
 #### List Split Keys
+
 ```http
 GET /api/split-key
 ```
 
 **Headers:**
+
 - `Authorization: Bearer <JWT_TOKEN>`
 
 #### Get Split Key Info
+
 ```http
 GET /api/split-key/:keyId
 ```
 
 **Headers:**
+
 - `Authorization: Bearer <JWT_TOKEN>`
 
 #### Deactivate Split Key
+
 ```http
 DELETE /api/split-key/:keyId
 ```
 
 **Headers:**
+
 - `Authorization: Bearer <JWT_TOKEN>`
 
 #### Validate Split Key
+
 ```http
 POST /api/split-key/validate
 ```
 
 **Headers:**
+
 - `Authorization: Bearer <JWT_TOKEN>`
 - `X-Partial-Key-Id: <KEY_ID>`
 - `X-Partial-Key: <CLIENT_PART>`
@@ -276,16 +288,19 @@ POST /api/split-key/validate
 ### Proxy Requests
 
 #### Make API Request with BYOK
+
 ```http
 POST /api/:provider/proxy
 ```
 
 **Headers:**
+
 - `Authorization: Bearer <JWT_TOKEN>`
 - `X-Partial-Key-Id: <KEY_ID>`
 - `X-Partial-Key: <CLIENT_PART>`
 
 **Body:**
+
 ```json
 {
   "endpoint": "/chat/completions",
@@ -315,6 +330,7 @@ const clientPart = 'a1b2c3d4e5f6...';
 ### 2. Key Rotation Strategy
 
 1. **Create new split key:**
+
 ```bash
 curl -X POST '/api/split-key/split' \
   -H 'Authorization: Bearer YOUR_JWT_TOKEN' \
@@ -325,11 +341,12 @@ curl -X POST '/api/split-key/split' \
   }'
 ```
 
-2. **Update your application** with new client part
+1. **Update your application** with new client part
 
-3. **Test new key** works correctly
+2. **Test new key** works correctly
 
-4. **Deactivate old key:**
+3. **Deactivate old key:**
+
 ```bash
 curl -X DELETE '/api/split-key/my-production-key-v1' \
   -H 'Authorization: Bearer YOUR_JWT_TOKEN'
@@ -344,19 +361,30 @@ curl -X DELETE '/api/split-key/my-production-key-v1' \
 
 ## Supported Providers
 
-| Provider | Key Format | Example |
-|----------|------------|---------|
-| OpenAI | `sk-*` | `sk-proj-123...` |
-| Gemini | AIzaSy* | `AIzaSyABC123...` |
-| Claude | `sk-ant-*` | `sk-ant-api03-123...` |
-| Groq | `gsk_*` | `gsk_123...` |
-| Mistral | Variable | Custom format |
+| Provider | Key Format | Example | Latest Supported |
+|----------|------------|---------|------------------|
+| OpenAI | `sk-*` | `sk-proj-123...` | GPT-4o, o1-preview |
+| Gemini | AIzaSy* | `AIzaSyABC123...` | Gemini 1.5 Pro/Flash, **3.0 Preview** |
+| Claude | `sk-ant-*` | `sk-ant-api03-123...` | Claude 3.5 Sonnet, **Claude 5 (2026)** |
+| Groq | `gsk_*` | `gsk_123...` | Llama 3.1 70B |
+| Mistral | Variable | Custom format | Mistral Large 2 |
+
+---
+
+## Reliability Features
+
+SafeAPI-Bridge now includes advanced reliability features that work seamlessly with BYOK:
+
+- **Automatic Retries**: Failed requests (429, 503, timeouts) are automatically retried with exponential backoff.
+- **Request Queuing**: High-volume requests are queued to protect upstream rate limits.
+- **Circuit Breakers**: If a provider is persistently down, the bridge will "open the circuit" to prevent unnecessary wait times.
 
 ## Troubleshooting
 
 ### Common Issues
 
 #### 401 Unauthorized - Split Key Authentication Failed
+
 **Cause:** Invalid or mismatched split key parts
 **Solution:** Verify key ID and client part are correct
 
@@ -369,10 +397,12 @@ curl -X POST '/api/split-key/validate' \
 ```
 
 #### 403 Forbidden - Access Denied
+
 **Cause:** Trying to access another user's split key
 **Solution:** Use the JWT token of the key creator
 
 #### 429 Too Many Requests
+
 **Cause:** Rate limiting on split key operations
 **Solution:** Implement exponential backoff and reduce request frequency
 
@@ -391,18 +421,23 @@ DEBUG=safeapi-bridge:*
 ## Migration from Server Key to BYOK
 
 ### Step 1: Keep Server Key Running
+
 Don't disable server key method immediately. Run both methods in parallel.
 
 ### Step 2: Create Split Keys
+
 Split your existing API keys using the split endpoint.
 
 ### Step 3: Update Applications
+
 Update your applications to use split key headers.
 
 ### Step 4: Test Thoroughly
+
 Ensure all functionality works with BYOK method.
 
 ### Step 5: Decommission Server Keys
+
 Once confident in BYOK setup, you can remove API keys from server environment.
 
 ## Support

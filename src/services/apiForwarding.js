@@ -2,16 +2,35 @@ const axios = require('axios');
 const { apiHeaders } = require('../config/apis');
 const { PERFORMANCE } = require('../config/constants');
 const { logger } = require('../utils/securityLogger');
+const { RetryService, RetryStrategy } = require('./retryService');
 
 /**
  * API Forwarding Service
- * Handles forwarding requests to external AI APIs
+ * Handles forwarding requests to external AI APIs with retry support
  * Single Responsibility: Make HTTP requests to external APIs
  */
 
 class ApiForwardingService {
+  // Circuit breaker state per API provider
+  static circuitStates = new Map();
+
   /**
-   * Forward request to external API
+   * Get or create circuit state for an API
+   * @private
+   */
+  static getCircuitState(api) {
+    if (!this.circuitStates.has(api)) {
+      this.circuitStates.set(api, {
+        failures: 0,
+        lastFailure: 0,
+        isOpen: false
+      });
+    }
+    return this.circuitStates.get(api);
+  }
+
+  /**
+   * Forward request to external API with retry support
    * @param {Object} options - Forwarding options
    * @param {string} options.api - API provider name
    * @param {string} options.targetUrl - Target URL
@@ -21,6 +40,7 @@ class ApiForwardingService {
    * @param {Object} options.headers - Original request headers
    * @param {boolean} options.wantsStream - Whether client wants streaming response
    * @param {boolean} options.isLightMode - Whether light mode is enabled
+   * @param {boolean} options.enableRetry - Whether to enable retry (default: true)
    * @returns {Promise<Object>} Axios response
    */
   static async forwardRequest({
@@ -32,41 +52,102 @@ class ApiForwardingService {
     headers,
     wantsStream,
     isLightMode,
-    queryParams
+    queryParams,
+    enableRetry = true
   }) {
-    // Determine timeout based on mode
-    const timeoutMs = this.getTimeout(isLightMode);
-
-    // Build headers
-    const requestHeaders = this.buildHeaders(api, apiKey, headers);
-
-    // Build axios config
-    const axiosConfig = {
-      method,
-      url: targetUrl,
-      headers: requestHeaders,
-      timeout: timeoutMs,
-      validateStatus: (status) => status < 600,
-      ...(wantsStream && { responseType: 'stream' })
-    };
-
-    // Add data or params based on method
-    if (method === 'GET') {
-      axiosConfig.params = queryParams || {};
-    } else {
-      axiosConfig.data = requestData;
-    }
-
-    // Make the request
+    const circuitState = this.getCircuitState(api);
     const startTime = Date.now();
-    const response = await axios(axiosConfig);
-    const responseTime = Date.now() - startTime;
 
-    return {
-      response,
-      responseTime,
-      success: response.status >= 200 && response.status < 400
+    // Build request config
+    const buildRequest = () => {
+      const timeoutMs = this.getTimeout(isLightMode);
+      const requestHeaders = this.buildHeaders(api, apiKey, headers);
+
+      const axiosConfig = {
+        method,
+        url: targetUrl,
+        headers: requestHeaders,
+        timeout: timeoutMs,
+        validateStatus: (status) => status < 600,
+        ...(wantsStream && { responseType: 'stream' })
+      };
+
+      if (method === 'GET') {
+        axiosConfig.params = queryParams || {};
+      } else {
+        axiosConfig.data = requestData;
+      }
+
+      return axiosConfig;
     };
+
+    // Execute with or without retry
+    const executeRequest = async (attempt = 1) => {
+      const axiosConfig = buildRequest();
+
+      if (attempt > 1) {
+        logger.info('Retry attempt for API request', {
+          api,
+          url: targetUrl,
+          attempt
+        });
+      }
+
+      const response = await axios(axiosConfig);
+      return response;
+    };
+
+    try {
+      let response;
+
+      if (enableRetry && !wantsStream) {
+        // Use retry with circuit breaker for non-streaming requests
+        response = await RetryService.executeWithCircuitBreaker(
+          executeRequest,
+          {
+            maxAttempts: parseInt(process.env.API_RETRY_ATTEMPTS || '3'),
+            delayMs: parseInt(process.env.API_RETRY_DELAY_MS || '1000'),
+            strategy: RetryStrategy.EXPONENTIAL,
+            circuitState,
+            failureThreshold: 5,
+            resetTimeout: 30000,
+            context: { api, url: targetUrl },
+            onRetry: (error, attempt, delay) => {
+              logger.warn('API request retry', {
+                api,
+                url: targetUrl,
+                attempt,
+                delay,
+                error: error.message
+              });
+            }
+          }
+        );
+      } else {
+        // Direct request for streaming or when retry is disabled
+        response = await executeRequest();
+      }
+
+      const responseTime = Date.now() - startTime;
+
+      return {
+        response,
+        responseTime,
+        success: response.status >= 200 && response.status < 400,
+        retried: false
+      };
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
+
+      logger.error('API forward request failed', {
+        api,
+        url: targetUrl,
+        error: error.message,
+        responseTime
+      });
+
+      throw error;
+    }
   }
 
   /**

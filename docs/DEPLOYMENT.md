@@ -314,6 +314,12 @@ gcloud run deploy safeapi-bridge \
 | `ALLOWED_ORIGINS` | CORS origins | `*` |
 | `REQUEST_TIMEOUT_MS` | Request timeout | `30000` |
 | `LOG_DIR` | Log directory | `./logs` |
+| `REDIS_URL` | Redis URL for queue (optional) | - |
+| `QUEUE_MAX_CONCURRENT` | Max concurrent queue jobs | `10` |
+| `QUEUE_MAX_SIZE` | Max queue size | `1000` |
+| `API_RETRY_ATTEMPTS` | Retry attempts for API calls | `3` |
+| `API_RETRY_DELAY_MS` | Initial retry delay | `1000` |
+| `RETRY_MAX_DELAY_MS` | Max delay for backoff | `30000` |
 
 ---
 
@@ -433,6 +439,7 @@ curl https://api.yourdomain.com/health
 ### Common Issues
 
 **Database connection errors:**
+
 ```bash
 # Check DATABASE_URL format
 # Ensure database is running and accessible
@@ -440,18 +447,21 @@ npm run prisma:generate
 ```
 
 **JWT errors:**
+
 ```bash
 # Ensure JWT_SECRET is set
 # Check token expiration
 ```
 
 **CORS errors:**
+
 ```bash
 # Configure ALLOWED_ORIGINS correctly
 # For mobile apps, set ALLOW_MOBILE_NO_ORIGIN=true
 ```
 
 **Rate limiting:**
+
 ```bash
 # Increase RATE_LIMIT_MAX_REQUESTS if needed
 # Check if behind proxy (trust proxy setting)

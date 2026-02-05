@@ -61,9 +61,12 @@ SafeAPI-Bridge is a secure proxy server that sits between your client applicatio
 ### Core Features
 
 - **Dual Authentication**: Server-managed keys or BYOK split-key
-- **19 AI Providers**: OpenAI, Gemini, Claude, Groq, Mistral, and more
+- **19 AI Providers**: OpenAI, Gemini (3.x), Claude (5), Groq, Mistral, and more
 - **Request Proxying**: Transparent forwarding with key injection
 - **Streaming Support**: Full support for SSE streaming responses
+- **Request Queue**: Bull queue with Redis (optional) or in-memory fallback
+- **Retry Mechanism**: Exponential backoff with circuit breaker pattern
+- **Priority Queue**: VIP users get priority processing
 
 ### Security Features
 
@@ -75,6 +78,7 @@ SafeAPI-Bridge is a secure proxy server that sits between your client applicatio
 - **Endpoint Whitelist**: Only allowed API paths can be proxied
 - **HTTPS Enforcement**: Automatic redirect in production
 - **Security Monitoring**: Real-time threat detection
+- **Circuit Breaker**: Automatic failover when APIs are unavailable
 
 ### Analytics & Admin
 
@@ -82,6 +86,7 @@ SafeAPI-Bridge is a secure proxy server that sits between your client applicatio
 - **Admin APIs**: User management, IP rules, webhooks
 - **Audit Logging**: All admin actions tracked
 - **Webhook Notifications**: Real-time event notifications
+- **Queue Statistics**: Monitor queue depth and processing stats
 
 ---
 
@@ -171,6 +176,7 @@ curl -X POST http://localhost:3000/auth/token \
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -439,4 +445,3 @@ This project is licensed under the MIT License - see [LICENSE](./LICENSE) for de
 [⭐ Star this repo](https://github.com/yourusername/safeapi-bridge) • [🐛 Report Bug](https://github.com/yourusername/safeapi-bridge/issues) • [💡 Request Feature](https://github.com/yourusername/safeapi-bridge/issues)
 
 </div>
-

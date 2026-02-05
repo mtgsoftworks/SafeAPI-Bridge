@@ -30,6 +30,7 @@ X-Admin-Key: <ADMIN_API_KEY>
 Generate a new JWT token. Automatically creates user if not exists.
 
 **Request:**
+
 ```json
 {
   "userId": "user-123",
@@ -38,6 +39,7 @@ Generate a new JWT token. Automatically creates user if not exists.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -60,11 +62,13 @@ Generate a new JWT token. Automatically creates user if not exists.
 Verify if the current token is valid.
 
 **Headers:**
+
 ```
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 **Response:**
+
 ```json
 {
   "valid": true,
@@ -81,11 +85,13 @@ Authorization: Bearer <JWT_TOKEN>
 Revoke the current token (adds to blacklist).
 
 **Headers:**
+
 ```
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -99,11 +105,13 @@ Authorization: Bearer <JWT_TOKEN>
 Get detailed information about the current token.
 
 **Headers:**
+
 ```
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 **Response:**
+
 ```json
 {
   "user": {
@@ -127,15 +135,18 @@ Authorization: Bearer <JWT_TOKEN>
 Main proxy endpoint for AI API requests.
 
 **Path Parameters:**
+
 - `api`: API provider name (openai, gemini, claude, groq, mistral, zai, deepseek, perplexity, together, openrouter, fireworks, github, replicate, stability, fal, elevenlabs, brave, deepl, openmeteo)
 
 **Headers (Server Key Method):**
+
 ```
 Authorization: Bearer <JWT_TOKEN>
 Content-Type: application/json
 ```
 
 **Headers (BYOK Split-Key Method):**
+
 ```
 Authorization: Bearer <JWT_TOKEN>
 Content-Type: application/json
@@ -144,6 +155,7 @@ X-Partial-Key: <CLIENT_PART>
 ```
 
 **Request Body (OpenAI Example):**
+
 ```json
 {
   "endpoint": "/chat/completions",
@@ -156,9 +168,10 @@ X-Partial-Key: <CLIENT_PART>
 ```
 
 **Request Body (Gemini Example):**
+
 ```json
 {
-  "endpoint": "/models/gemini-2.5-flash:generateContent",
+  "endpoint": "/models/gemini-3-flash:generateContent",
   "contents": [
     {
       "parts": [
@@ -174,10 +187,11 @@ X-Partial-Key: <CLIENT_PART>
 ```
 
 **Request Body (Claude Example):**
+
 ```json
 {
   "endpoint": "/messages",
-  "model": "claude-3-opus-20240229",
+  "model": "claude-sonnet-5-20260203",
   "max_tokens": 1024,
   "messages": [
     { "role": "user", "content": "What is the meaning of life?" }
@@ -193,6 +207,7 @@ The response is transparently forwarded from the AI provider.
 Get list of allowed endpoints for a specific API.
 
 **Response:**
+
 ```json
 {
   "api": "OPENAI",
@@ -217,6 +232,7 @@ Get list of allowed endpoints for a specific API.
 Create a new split key for BYOK usage.
 
 **Request:**
+
 ```json
 {
   "originalKey": "sk-your-api-key-here",
@@ -227,6 +243,7 @@ Create a new split key for BYOK usage.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -250,6 +267,7 @@ Create a new split key for BYOK usage.
 List all split keys for the current user.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -273,6 +291,7 @@ List all split keys for the current user.
 Get details for a specific split key.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -295,6 +314,7 @@ Get details for a specific split key.
 Deactivate a split key.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -308,6 +328,7 @@ Deactivate a split key.
 Validate split key headers without making an API request.
 
 **Headers:**
+
 ```
 Authorization: Bearer <JWT_TOKEN>
 X-Partial-Key-Id: my-custom-key-id
@@ -315,6 +336,7 @@ X-Partial-Key: <CLIENT_PART>
 ```
 
 **Response:**
+
 ```json
 {
   "valid": true,
@@ -333,6 +355,7 @@ X-Partial-Key: <CLIENT_PART>
 Get current user's usage statistics.
 
 **Response:**
+
 ```json
 {
   "userId": "user-123",
@@ -363,12 +386,14 @@ Get current user's usage statistics.
 Get system-wide statistics.
 
 **Headers:**
+
 ```
 Authorization: Bearer <JWT_TOKEN>
 X-Admin-Key: <ADMIN_API_KEY>
 ```
 
 **Response:**
+
 ```json
 {
   "period": {
@@ -455,6 +480,7 @@ Get audit logs with filtering.
 Service info.
 
 **Response:**
+
 ```json
 {
   "service": "SafeAPI-Bridge",
@@ -469,6 +495,7 @@ Service info.
 Detailed health check including database and API status.
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -519,10 +546,12 @@ All errors follow this format:
 ## Rate Limiting
 
 Default limits:
+
 - **Global**: 100 requests per hour per IP
 - **Auth endpoints**: 10 requests per minute per IP
 
 Rate limit headers:
+
 ```
 X-RateLimit-Limit: 100
 X-RateLimit-Remaining: 95

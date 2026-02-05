@@ -22,12 +22,12 @@ const allowedEndpoints = {
 
   gemini: [
     '/models',
-    // Legacy models
+    // Legacy models (deprecated - will be removed)
     '/models/gemini-pro:generateContent',
     '/models/gemini-pro-vision:generateContent',
     '/models/gemini-1.5-pro:generateContent',
     '/models/gemini-1.5-flash:generateContent',
-    // Latest models (2025)
+    // Gemini 2.x models (deprecating March 2026)
     '/models/gemini-2.5-flash:generateContent',
     '/models/gemini-2.5-pro:generateContent',
     '/models/gemini-2.5-flash-lite:generateContent',
@@ -35,9 +35,20 @@ const allowedEndpoints = {
     '/models/gemini-2.0-flash-001:generateContent',
     '/models/gemini-2.0-flash-lite:generateContent',
     '/models/gemini-2.0-flash-lite-001:generateContent',
+    // Gemini 3.x models (latest - 2026)
+    '/models/gemini-3-pro-preview:generateContent',
+    '/models/gemini-3-flash-preview:generateContent',
+    '/models/gemini-3-pro:generateContent',
+    '/models/gemini-3-flash:generateContent',
+    // Streaming endpoints
+    '/models/gemini-3-pro-preview:streamGenerateContent',
+    '/models/gemini-3-flash-preview:streamGenerateContent',
+    '/models/gemini-3-pro:streamGenerateContent',
+    '/models/gemini-3-flash:streamGenerateContent',
     // Embeddings
     '/models/embedding-001',
-    '/models/text-embedding-004'
+    '/models/text-embedding-004',
+    '/models/text-embedding-005'
   ],
 
   claude: [
@@ -155,7 +166,7 @@ const apiHeaders = {
 
   claude: (apiKey) => ({
     'x-api-key': apiKey,
-    'anthropic-version': '2025-06-01', // Updated for Claude 4 models (2025)
+    'anthropic-version': '2026-01-01', // Updated for Claude 5 models (2026)
     'Content-Type': 'application/json'
   }),
 

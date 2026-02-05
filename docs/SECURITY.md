@@ -52,6 +52,11 @@ SafeAPI-Bridge implements multiple layers of security to protect API keys and pr
 │  ├── Suspicious Activity Detection                          │
 │  ├── Audit Logging (admin actions)                          │
 │  └── Request Correlation (X-Request-ID)                     │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 8: Reliability (Circuit Breaker)                     │
+│  ├── Automatic Failover                                     │
+│  ├── Error Persistence Tracking                             │
+│  └── Rapid Fault Response                                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -62,17 +67,20 @@ SafeAPI-Bridge implements multiple layers of security to protect API keys and pr
 ### JWT Token Security
 
 **Token Structure:**
+
 - Algorithm: HS256
 - Expiration: 7 days (configurable)
 - Payload: `{ userId, appId, createdAt, iat, exp }`
 
 **Best Practices:**
+
 - Generate strong `JWT_SECRET` (64+ characters)
 - Rotate secrets periodically
 - Use token blacklist for logout
 - Validate token on every request
 
 **Token Blacklist:**
+
 - In-memory LRU cache for performance
 - Persistent storage in database
 - Automatic cleanup of expired entries
@@ -80,6 +88,7 @@ SafeAPI-Bridge implements multiple layers of security to protect API keys and pr
 ### Admin Authentication
 
 Admin endpoints require both:
+
 1. Valid JWT token
 2. `X-Admin-Key` header matching `ADMIN_API_KEY`
 
@@ -154,8 +163,9 @@ const allowedEndpoints = {
     '/models'
   ],
   gemini: [
-    '/models/gemini-2.5-flash:generateContent',
-    '/models/gemini-2.5-pro:generateContent',
+    '/models/gemini-3-pro:generateContent',
+    '/models/gemini-3-flash:generateContent',
+    '/models/gemini-1.5-pro:generateContent',
     // ... more endpoints
   ]
   // ... other providers
@@ -163,6 +173,7 @@ const allowedEndpoints = {
 ```
 
 **Protection Against:**
+
 - Unauthorized endpoint access
 - API abuse through unexpected endpoints
 - Data exfiltration attempts
@@ -255,11 +266,13 @@ The `securityMonitor` middleware detects:
 ### Logging
 
 Security events are logged to:
+
 - `logs/security-YYYY-MM-DD.log`
 - Console (development)
 - Webhook notifications (if configured)
 
 **Log Format:**
+
 ```json
 {
   "timestamp": "2025-01-13T10:00:00.000Z",
@@ -286,6 +299,7 @@ Security events are logged to:
 - Quota adjustments
 
 **Audit Log Entry:**
+
 ```json
 {
   "action": "user.update",

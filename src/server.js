@@ -34,6 +34,9 @@ const analyticsRoutes = require('./routes/analytics');
 const splitKeyRoutes = require('./routes/splitKey');
 const { healthCheck } = require('./controllers/proxy');
 
+// Services (initialized on import)
+const { requestQueue } = require('./services/requestQueue');
+
 // Initialize Express app
 const app = express();
 
@@ -110,12 +113,12 @@ if (swaggerDocument) {
       showCommonExtensions: true
     }
   }));
-  
+
   // Serve raw OpenAPI spec
   app.get('/api-docs.json', (req, res) => {
     res.json(swaggerDocument);
   });
-  
+
   app.get('/api-docs.yaml', (req, res) => {
     res.type('text/yaml').send(YAML.stringify(swaggerDocument, 4));
   });
@@ -217,6 +220,10 @@ const gracefulShutdown = async (signal) => {
     console.log('✅ Server stopped accepting new connections');
 
     try {
+      // Close request queue
+      await requestQueue.close();
+      console.log('✅ Request queue closed');
+
       // Close database connections
       const prisma = require('./db/client');
       await prisma.$disconnect();

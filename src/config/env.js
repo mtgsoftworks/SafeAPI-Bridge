@@ -141,14 +141,49 @@ const config = {
     maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100
   },
 
+  // Provider-specific timeouts (ms)
+  // Falls back to UPSTREAM_TIMEOUT_MS or default 60000ms
+  providerTimeouts: {
+    openai: parseInt(process.env.OPENAI_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 60000,
+    gemini: parseInt(process.env.GEMINI_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 60000,
+    claude: parseInt(process.env.CLAUDE_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 90000, // Claude can be slower
+    groq: parseInt(process.env.GROQ_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 30000, // Groq is fast
+    mistral: parseInt(process.env.MISTRAL_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 60000,
+    deepseek: parseInt(process.env.DEEPSEEK_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 60000,
+    perplexity: parseInt(process.env.PERPLEXITY_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 60000,
+    together: parseInt(process.env.TOGETHER_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 60000,
+    openrouter: parseInt(process.env.OPENROUTER_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 90000,
+    fireworks: parseInt(process.env.FIREWORKS_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 60000,
+    github: parseInt(process.env.GITHUB_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 60000,
+    replicate: parseInt(process.env.REPLICATE_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 120000, // Image gen slower
+    stability: parseInt(process.env.STABILITY_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 120000,
+    fal: parseInt(process.env.FAL_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 120000,
+    elevenlabs: parseInt(process.env.ELEVENLABS_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 60000,
+    zai: parseInt(process.env.ZAI_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 60000,
+    brave: parseInt(process.env.BRAVE_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 30000,
+    deepl: parseInt(process.env.DEEPL_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 30000,
+    openmeteo: parseInt(process.env.OPENMETEO_TIMEOUT_MS) || parseInt(process.env.UPSTREAM_TIMEOUT_MS) || 15000
+  },
+
+  // Provider-specific Rate Limits (requests per window)
+  // Default window is 1 minute (60000ms)
+  providerRatelimits: {
+    openai: { max: parseInt(process.env.RATE_LIMIT_OPENAI_MAX) || 500, windowMs: 60000 },
+    gemini: { max: parseInt(process.env.RATE_LIMIT_GEMINI_MAX) || 60, windowMs: 60000 },
+    claude: { max: parseInt(process.env.RATE_LIMIT_CLAUDE_MAX) || 50, windowMs: 60000 },
+    groq: { max: parseInt(process.env.RATE_LIMIT_GROQ_MAX) || 100, windowMs: 60000 },
+    // Default for others
+    default: { max: parseInt(process.env.RATE_LIMIT_DEFAULT_MAX) || 100, windowMs: 60000 }
+  },
+
   // CORS
   allowedOrigins: process.env.ALLOWED_ORIGINS
     ? (process.env.ALLOWED_ORIGINS === 'none'
-        ? []
-        : process.env.ALLOWED_ORIGINS
-            .split(',')
-            .map(o => o.trim())
-            .filter(Boolean))
+      ? []
+      : process.env.ALLOWED_ORIGINS
+        .split(',')
+        .map(o => o.trim())
+        .filter(Boolean))
     : (process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3000']),
 
   // Mobile allowances (no Origin header from native apps)

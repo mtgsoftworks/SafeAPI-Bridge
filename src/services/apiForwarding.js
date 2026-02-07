@@ -60,7 +60,7 @@ class ApiForwardingService {
 
     // Build request config
     const buildRequest = () => {
-      const timeoutMs = this.getTimeout(isLightMode);
+      const timeoutMs = this.getTimeout(api, isLightMode);
       const requestHeaders = this.buildHeaders(api, apiKey, headers);
 
       const axiosConfig = {
@@ -125,7 +125,39 @@ class ApiForwardingService {
         );
       } else {
         // Direct request for streaming or when retry is disabled
-        response = await executeRequest();
+        // For streams, we need to intercept the response stream to count tokens
+        // This is an estimation based on chunks
+
+        if (wantsStream) {
+          const axiosConfig = buildRequest();
+          response = await axios(axiosConfig);
+
+          // Only enhance response if it's a stream and successful
+          if (response.data && response.data.on) {
+            let accumulatedData = '';
+
+            // Pass-through stream but capture data
+            const responseStream = response.data;
+            const originalPipe = responseStream.pipe.bind(responseStream);
+
+            // Override pipe/events to capture data
+            responseStream.on('data', (chunk) => {
+              accumulatedData += chunk.toString();
+            });
+
+            responseStream.on('end', () => {
+              // Calculate usage on stream end
+              // This data will be available to the controller via the stream object if we attach it
+              // or we can attach a property to the response object
+              response.usageData = {
+                accumulatedData,
+                estimatedTokens: Math.ceil(accumulatedData.length / 4) // Rough estimation
+              };
+            });
+          }
+        } else {
+          response = await executeRequest();
+        }
       }
 
       const responseTime = Date.now() - startTime;
@@ -151,14 +183,25 @@ class ApiForwardingService {
   }
 
   /**
-   * Get timeout based on mode
+   * Get timeout based on provider and mode
+   * Priority: Provider-specific env > Global UPSTREAM_TIMEOUT_MS > Light mode default
    * @private
    */
-  static getTimeout(isLightMode) {
+  static getTimeout(api, isLightMode) {
+    const config = require('../config/env');
+
+    // Check provider-specific timeout first
+    if (config.providerTimeouts && config.providerTimeouts[api]) {
+      return config.providerTimeouts[api];
+    }
+
+    // Fall back to global env timeout
     const envTimeout = parseInt(process.env.UPSTREAM_TIMEOUT_MS || '0');
     if (envTimeout > 0) {
       return envTimeout;
     }
+
+    // Default based on mode
     return isLightMode
       ? PERFORMANCE.LIGHT_MODE_TIMEOUT_MS
       : PERFORMANCE.NORMAL_MODE_TIMEOUT_MS;

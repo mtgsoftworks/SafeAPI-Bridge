@@ -194,6 +194,39 @@ const logTokenBlacklist = (action, userId, tokenId, ip) => {
   });
 };
 
+/**
+ * Dynamically change log level at runtime
+ * @param {string} level - New log level (error, warn, security, info, http, debug)
+ * @returns {boolean} Success status
+ */
+const setLogLevel = (level) => {
+  const validLevels = Object.keys(customLevels.levels);
+  if (!validLevels.includes(level)) {
+    return { success: false, error: `Invalid level. Valid: ${validLevels.join(', ')}` };
+  }
+
+  // Update all transports
+  logger.transports.forEach(transport => {
+    transport.level = level;
+  });
+
+  logger.info(`Log level changed to: ${level}`);
+  return { success: true, level, validLevels };
+};
+
+/**
+ * Get current log level
+ * @returns {string} Current log level
+ */
+const getLogLevel = () => {
+  // Return the first transport's level (they should all be the same)
+  const currentLevel = logger.transports[0]?.level || LOG_LEVEL;
+  return {
+    current: currentLevel,
+    available: Object.keys(customLevels.levels)
+  };
+};
+
 module.exports = {
   logger,
   logSecurityEvent,
@@ -202,5 +235,7 @@ module.exports = {
   logAdminOperation,
   logRateLimitExceeded,
   logSSRFAttempt,
-  logTokenBlacklist
+  logTokenBlacklist,
+  setLogLevel,
+  getLogLevel
 };

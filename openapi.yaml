@@ -320,6 +320,82 @@ paths:
         '403':
           description: Missing or invalid admin key
 
+  /admin/metrics:
+    get:
+      summary: Get system metrics (JSON)
+      tags: [Admin]
+      security:
+        - adminApiKey: []
+      responses:
+        '200':
+          description: System metrics
+          content:
+            application/json:
+              schema:
+                type: object
+  
+  /admin/metrics/prometheus:
+    get:
+      summary: Get system metrics (Prometheus format)
+      tags: [Admin]
+      security:
+        - adminApiKey: []
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /admin/metrics/reset:
+    post:
+      summary: Reset system metrics
+      tags: [Admin]
+      security:
+        - adminApiKey: []
+      responses:
+        '200':
+          description: Metrics reset
+  
+  /admin/log-level:
+    get:
+      summary: Get current log level
+      tags: [Admin]
+      security:
+        - adminApiKey: []
+      responses:
+        '200':
+          description: Current log level info
+    put:
+      summary: Change log level
+      tags: [Admin]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                level:
+                  type: string
+                  enum: [error, warn, security, info, http, debug]
+      responses:
+        '200':
+          description: Log level updated
+
+  /admin/provider-timeouts:
+    get:
+      summary: Get configured provider timeouts
+      tags: [Admin]
+      security:
+        - adminApiKey: []
+      responses:
+        '200':
+          description: Provider timeouts
+
   /analytics/errors:
     get:
       summary: Error statistics (admin)

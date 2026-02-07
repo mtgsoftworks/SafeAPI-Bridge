@@ -52,6 +52,48 @@ const RETRYABLE_ERROR_PATTERNS = [
     /capacity/i
 ];
 
+/**
+ * Parse Retry-After header value
+ * Supports both seconds (integer) and HTTP-date formats
+ * @param {string|number} retryAfter - Retry-After header value
+ * @returns {number|null} Delay in milliseconds, or null if invalid
+ */
+function parseRetryAfter(retryAfter) {
+    if (!retryAfter) return null;
+
+    // If it's a number (seconds)
+    const seconds = parseInt(retryAfter, 10);
+    if (!isNaN(seconds) && seconds >= 0) {
+        return seconds * 1000;
+    }
+
+    // If it's an HTTP-date (e.g., "Wed, 21 Oct 2025 07:28:00 GMT")
+    const date = new Date(retryAfter);
+    if (!isNaN(date.getTime())) {
+        const delay = date.getTime() - Date.now();
+        return delay > 0 ? delay : null;
+    }
+
+    return null;
+}
+
+/**
+ * Extract Retry-After delay from error response
+ * @param {Error} error - Axios error with response
+ * @returns {number|null} Delay in milliseconds, or null if not available
+ */
+function getRetryAfterDelay(error) {
+    const headers = error.response?.headers;
+    if (!headers) return null;
+
+    // Check various header name formats
+    const retryAfter = headers['retry-after'] ||
+        headers['Retry-After'] ||
+        headers['x-ratelimit-reset-after'];
+
+    return parseRetryAfter(retryAfter);
+}
+
 class RetryService {
     /**
      * Execute a function with retry logic
@@ -102,14 +144,30 @@ class RetryService {
                     throw error;
                 }
 
-                // Calculate delay
-                const delay = this.calculateDelay(attempt, delayMs, strategy);
+                // Check for Retry-After header (takes precedence)
+                const retryAfterDelay = getRetryAfterDelay(error);
+                let delay;
+
+                if (retryAfterDelay && retryAfterDelay > 0) {
+                    // Use Retry-After header, but cap at max delay
+                    delay = Math.min(retryAfterDelay, RETRY_CONFIG.MAX_DELAY_MS);
+                    logger.info('Using Retry-After header delay', {
+                        retryAfterMs: retryAfterDelay,
+                        cappedDelayMs: delay,
+                        attempt,
+                        context
+                    });
+                } else {
+                    // Calculate delay using strategy
+                    delay = this.calculateDelay(attempt, delayMs, strategy);
+                }
 
                 // Log retry attempt
                 logger.warn('Retrying after error', {
                     attempt,
                     maxAttempts,
                     delay,
+                    usedRetryAfterHeader: !!retryAfterDelay,
                     error: error.message,
                     context
                 });
@@ -280,5 +338,7 @@ module.exports = {
     RetryStrategy,
     RETRY_CONFIG,
     RETRYABLE_STATUS_CODES,
-    RETRYABLE_ERROR_PATTERNS
+    RETRYABLE_ERROR_PATTERNS,
+    parseRetryAfter,
+    getRetryAfterDelay
 };

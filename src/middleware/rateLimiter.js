@@ -38,7 +38,46 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+/**
+ * Provider-specific Rate Limiter Factory
+ * Creates a distinct limiter for each provider route
+ */
+const createProviderRateLimiter = (api) => {
+  const settings = config.providerRatelimits[api] || config.providerRatelimits.default;
+
+  return rateLimit({
+    windowMs: settings.windowMs,
+    max: settings.max,
+    keyGenerator: (req) => {
+      // Limit by IP for now (could be by User/App ID later)
+      return `${api}:${req.ip}`;
+    },
+    message: {
+      error: 'Provider Rate Limit Exceeded',
+      message: `Too many requests for ${api} API. Limit is ${settings.max} per minute.`,
+      retryAfter: 'Please try again later'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.path === '/health',
+  });
+};
+
+// Cache limiters to avoid recreation
+const providerLimiters = {};
+const getProviderLimiter = (req, res, next) => {
+  const api = req.params.api;
+  if (!api) return next();
+
+  if (!providerLimiters[api]) {
+    providerLimiters[api] = createProviderRateLimiter(api);
+  }
+
+  return providerLimiters[api](req, res, next);
+};
+
 module.exports = {
   limiter,
-  authLimiter
+  authLimiter,
+  getProviderLimiter
 };

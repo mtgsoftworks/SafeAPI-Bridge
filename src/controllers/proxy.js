@@ -6,6 +6,7 @@ const UsageTrackingService = require('../services/usage');
 const KeyResolutionService = require('../services/keyResolution');
 const ApiForwardingService = require('../services/apiForwarding');
 const webhookService = require('../services/webhook');
+const { requestQueue } = require('../services/requestQueue');
 const { logger } = require('../utils/securityLogger');
 const prisma = require('../db/client');
 
@@ -145,10 +146,66 @@ const proxyRequest = async (req, res) => {
         keyId
       });
 
+      // Build response object for stream usage (if applicable)
+      const streamResponseData = {
+        usage: {
+          total_tokens: (response.usageData?.estimatedTokens || 0),
+          completion_tokens: (response.usageData?.estimatedTokens || 0),
+          prompt_tokens: 0
+        }
+      };
+
+      // Handle streaming response
+      if (wantsStream && response.data && response.data.pipe) {
+        // Set headers for SSE/Stream
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        // Pipe
+        response.data.pipe(res);
+
+        // Track usage on end
+        response.data.on('end', () => {
+          setImmediate(() => {
+            UsageTrackingService.trackRequest({
+              userId: req.user.userId,
+              api,
+              endpoint,
+              method: req.method,
+              statusCode: response.status,
+              success: true,
+              responseTime,
+              req,
+              responseData: streamResponseData,
+              keySource,
+              keyId
+            }).catch(err => logger.error('Stream usage tracking error', { error: err.message }));
+          });
+        });
+        return;
+      }
+
+      // Normal response tracking
+      if (keySource) {
+        trackUsageAsync({
+          userId: req.user.userId,
+          api,
+          endpoint,
+          method: req.method,
+          statusCode: response.status,
+          success,
+          responseTime,
+          req,
+          responseData: response.data,
+          keySource,
+          keyId
+        });
+      }
+
       // Forward the response
       res.status(response.status).json(response.data);
     }
-
   } catch (error) {
     handleProxyError(error, req, res, startTime);
   }
@@ -301,6 +358,14 @@ const healthCheck = async (req, res) => {
     logger.error('Database health check failed', { error: error.message });
   }
 
+  // Get queue stats
+  let queueStats = null;
+  try {
+    queueStats = await requestQueue.getStats();
+  } catch (error) {
+    logger.error('Queue health check failed', { error: error.message });
+  }
+
   // Overall health status
   const isHealthy = dbStatus === 'connected';
   const overallStatus = isHealthy ? 'healthy' : 'degraded';
@@ -313,6 +378,16 @@ const healthCheck = async (req, res) => {
       database: {
         status: dbStatus,
         latency: `${dbLatency}ms`
+      },
+      queue: queueStats ? {
+        type: queueStats.type,
+        status: 'connected',
+        waiting: queueStats.waiting,
+        active: queueStats.active,
+        completed: queueStats.completed,
+        failed: queueStats.failed
+      } : {
+        status: 'unavailable'
       }
     },
     summary: `${configuredCount}/${apis.length} APIs configured`

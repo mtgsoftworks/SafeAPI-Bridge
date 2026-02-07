@@ -7,6 +7,7 @@ const { asyncHandler } = require('../utils/errorHandler');
 const quotaCheck = require('../middleware/quotaCheck');
 const ipCheck = require('../middleware/ipCheck');
 const { validateSplitKey, reconstructApiKey, addSplitKeySecurityHeaders } = require('../middleware/splitKey');
+const { getProviderLimiter } = require('../middleware/rateLimiter');
 
 /**
  * Proxy Routes
@@ -61,6 +62,7 @@ router.post(
   ipCheck,
   authenticateToken,
   quotaCheck,
+  getProviderLimiter, // New rate limiter
   validateSplitKey,
   reconstructApiKey,
   validateProxyRequest,
@@ -73,6 +75,7 @@ router.get(
   ipCheck,
   authenticateToken,
   quotaCheck,
+  getProviderLimiter, // New rate limiter
   validateSplitKey,
   reconstructApiKey,
   validateProxyRequest,
@@ -98,6 +101,7 @@ const createApiRoute = (apiName) => {
     ipCheck,
     authenticateToken,
     quotaCheck,
+    getProviderLimiter, // New rate limiter
     validateSplitKey,
     reconstructApiKey,
     (req, res, next) => {

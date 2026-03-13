@@ -92,7 +92,6 @@ app.get('/', (req, res) => {
   res.json({
     service: 'SafeAPI-Bridge',
     status: 'running',
-    version: '1.0.0',
     message: 'Server is healthy. Use /health for detailed status.'
   });
 });

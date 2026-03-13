@@ -43,8 +43,11 @@ jest.mock('../../src/utils/securityLogger', () => ({
 describe('Proxy Controller', () => {
   let mockReq;
   let mockRes;
+  const ADMIN_KEY = 'test-admin-key';
 
   beforeEach(() => {
+    process.env.ADMIN_API_KEY = ADMIN_KEY;
+
     mockReq = {
       params: {},
       body: {},
@@ -63,10 +66,46 @@ describe('Proxy Controller', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    delete process.env.ADMIN_API_KEY;
+  });
+
   describe('healthCheck', () => {
-    it('should return healthy status when database is connected', async () => {
+    it('should return minimal status for unauthenticated users when database is connected', async () => {
       const prisma = require('../../src/db/client');
       prisma.$queryRaw.mockResolvedValue([{ 1: 1 }]);
+
+      await healthCheck(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      const response = mockRes.json.mock.calls[0][0];
+      expect(response.status).toBe('healthy');
+      expect(response.timestamp).toBeDefined();
+      // Should NOT expose infrastructure details
+      expect(response.apis).toBeUndefined();
+      expect(response.infrastructure).toBeUndefined();
+      expect(response.summary).toBeUndefined();
+    });
+
+    it('should return minimal degraded status for unauthenticated users when database fails', async () => {
+      const prisma = require('../../src/db/client');
+      prisma.$queryRaw.mockRejectedValue(new Error('Connection failed'));
+
+      await healthCheck(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(503);
+      const response = mockRes.json.mock.calls[0][0];
+      expect(response.status).toBe('degraded');
+      expect(response.timestamp).toBeDefined();
+      // Should NOT expose infrastructure details
+      expect(response.apis).toBeUndefined();
+      expect(response.infrastructure).toBeUndefined();
+    });
+
+    it('should return detailed status for admin users when database is connected', async () => {
+      const prisma = require('../../src/db/client');
+      prisma.$queryRaw.mockResolvedValue([{ 1: 1 }]);
+      mockReq.headers['x-admin-key'] = ADMIN_KEY;
 
       await healthCheck(mockReq, mockRes);
 
@@ -83,9 +122,10 @@ describe('Proxy Controller', () => {
       );
     });
 
-    it('should return degraded status when database fails', async () => {
+    it('should return detailed degraded status for admin users when database fails', async () => {
       const prisma = require('../../src/db/client');
       prisma.$queryRaw.mockRejectedValue(new Error('Connection failed'));
+      mockReq.headers['x-admin-key'] = ADMIN_KEY;
 
       await healthCheck(mockReq, mockRes);
 
@@ -102,9 +142,10 @@ describe('Proxy Controller', () => {
       );
     });
 
-    it('should include API configuration status', async () => {
+    it('should include API configuration status for admin users', async () => {
       const prisma = require('../../src/db/client');
       prisma.$queryRaw.mockResolvedValue([{ 1: 1 }]);
+      mockReq.headers['x-admin-key'] = ADMIN_KEY;
 
       await healthCheck(mockReq, mockRes);
 
@@ -114,9 +155,10 @@ describe('Proxy Controller', () => {
       expect(response.apis.gemini.configured).toBe(false);
     });
 
-    it('should include summary of configured APIs', async () => {
+    it('should include summary of configured APIs for admin users', async () => {
       const prisma = require('../../src/db/client');
       prisma.$queryRaw.mockResolvedValue([{ 1: 1 }]);
+      mockReq.headers['x-admin-key'] = ADMIN_KEY;
 
       await healthCheck(mockReq, mockRes);
 
@@ -135,7 +177,7 @@ describe('Proxy Controller', () => {
       expect(new Date(response.timestamp)).toBeInstanceOf(Date);
     });
 
-    it('should return light mode response when LIGHT_MODE is enabled', async () => {
+    it('should return minimal light mode response for unauthenticated users', async () => {
       const originalLightMode = process.env.LIGHT_MODE;
       process.env.LIGHT_MODE = 'true';
 
@@ -143,10 +185,44 @@ describe('Proxy Controller', () => {
 
       expect(mockRes.status).toHaveBeenCalledWith(200);
       const response = mockRes.json.mock.calls[0][0];
-      expect(response.mode).toBe('light');
-      expect(response.infrastructure.database.status).toBe('skipped');
+      expect(response.status).toBe('healthy');
+      expect(response.timestamp).toBeDefined();
+      // Should NOT expose details in light mode for non-admin
+      expect(response.apis).toBeUndefined();
+      expect(response.infrastructure).toBeUndefined();
 
       process.env.LIGHT_MODE = originalLightMode;
+    });
+
+    it('should return detailed light mode response for admin users', async () => {
+      const originalLightMode = process.env.LIGHT_MODE;
+      process.env.LIGHT_MODE = 'true';
+      mockReq.headers['x-admin-key'] = ADMIN_KEY;
+
+      await healthCheck(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      const response = mockRes.json.mock.calls[0][0];
+      expect(response.mode).toBe('light');
+      expect(response.infrastructure.database.status).toBe('skipped');
+      expect(response.apis).toBeDefined();
+
+      process.env.LIGHT_MODE = originalLightMode;
+    });
+
+    it('should not expose details with invalid admin key', async () => {
+      const prisma = require('../../src/db/client');
+      prisma.$queryRaw.mockResolvedValue([{ 1: 1 }]);
+      mockReq.headers['x-admin-key'] = 'wrong-key';
+
+      await healthCheck(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      const response = mockRes.json.mock.calls[0][0];
+      expect(response.status).toBe('healthy');
+      // Should NOT expose details with wrong admin key
+      expect(response.apis).toBeUndefined();
+      expect(response.infrastructure).toBeUndefined();
     });
   });
 

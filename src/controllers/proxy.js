@@ -305,6 +305,8 @@ const getAvailableEndpoints = (req, res) => {
 
 /**
  * Check if request has valid admin authentication
+ * @param {Object} req - Express request object
+ * @returns {boolean} True if the request contains a valid admin key
  * @private
  */
 const isAdminAuthenticated = (req) => {

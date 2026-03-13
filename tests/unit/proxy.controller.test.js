@@ -66,6 +66,10 @@ describe('Proxy Controller', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    delete process.env.ADMIN_API_KEY;
+  });
+
   describe('healthCheck', () => {
     it('should return minimal status for unauthenticated users when database is connected', async () => {
       const prisma = require('../../src/db/client');

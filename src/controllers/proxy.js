@@ -9,6 +9,7 @@ const webhookService = require('../services/webhook');
 const { requestQueue } = require('../services/requestQueue');
 const { logger } = require('../utils/securityLogger');
 const prisma = require('../db/client');
+const { timingSafeCompare } = require('../middleware/adminAuth');
 
 /**
  * Main Proxy Controller
@@ -303,15 +304,37 @@ const getAvailableEndpoints = (req, res) => {
 };
 
 /**
+ * Check if request has valid admin authentication
+ * @private
+ */
+const isAdminAuthenticated = (req) => {
+  const adminKey = req.headers['x-admin-key'];
+  const expectedKey = process.env.ADMIN_API_KEY;
+  if (!adminKey || !expectedKey) return false;
+  return timingSafeCompare(adminKey, expectedKey);
+};
+
+/**
  * Health check for all configured APIs + infrastructure
  * Tests database connectivity
+ * Returns minimal info for unauthenticated users, detailed info for admins
  */
 const healthCheck = async (req, res) => {
+  const isAdmin = isAdminAuthenticated(req);
+
   // Use centralized API list from config
   const apis = SUPPORTED_APIS;
 
   // Light mode: keep health check extremely cheap and always HTTP 200
   if (process.env.LIGHT_MODE === 'true') {
+    // Minimal response for non-admin users
+    if (!isAdmin) {
+      return res.status(200).json({
+        status: 'healthy',
+        timestamp: new Date().toISOString()
+      });
+    }
+
     const status = {};
     apis.forEach(api => {
       const apiConfig = config[api];
@@ -358,7 +381,19 @@ const healthCheck = async (req, res) => {
     logger.error('Database health check failed', { error: error.message });
   }
 
-  // Get queue stats
+  // Overall health status
+  const isHealthy = dbStatus === 'connected';
+  const overallStatus = isHealthy ? 'healthy' : 'degraded';
+
+  // Minimal response for non-admin users (hide infrastructure details)
+  if (!isAdmin) {
+    return res.status(isHealthy ? 200 : 503).json({
+      status: overallStatus,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // Get queue stats (only for admin)
   let queueStats = null;
   try {
     queueStats = await requestQueue.getStats();
@@ -366,10 +401,7 @@ const healthCheck = async (req, res) => {
     logger.error('Queue health check failed', { error: error.message });
   }
 
-  // Overall health status
-  const isHealthy = dbStatus === 'connected';
-  const overallStatus = isHealthy ? 'healthy' : 'degraded';
-
+  // Detailed response for admin users
   res.status(isHealthy ? 200 : 503).json({
     status: overallStatus,
     timestamp: new Date().toISOString(),

@@ -229,6 +229,19 @@ describe('Proxy Integration Tests', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('status');
       expect(response.body).toHaveProperty('timestamp');
+      // Without admin key, should NOT expose detailed info
+      expect(response.body).not.toHaveProperty('apis');
+      expect(response.body).not.toHaveProperty('infrastructure');
+    });
+
+    test('should return detailed health status with admin key', async () => {
+      const response = await request(app)
+        .get('/health')
+        .set('X-Admin-Key', process.env.ADMIN_API_KEY);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('status');
+      expect(response.body).toHaveProperty('timestamp');
       expect(response.body).toHaveProperty('apis');
     });
 
@@ -239,7 +252,8 @@ describe('Proxy Integration Tests', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('service');
       expect(response.body).toHaveProperty('status');
-      expect(response.body).toHaveProperty('version');
+      // version should not be exposed
+      expect(response.body).not.toHaveProperty('version');
     });
   });
 

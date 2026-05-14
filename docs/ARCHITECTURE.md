@@ -1,344 +1,281 @@
-# SafeAPI-Bridge Architecture
+﻿# SafeAPI-Bridge Architecture
 
-## Overview
+SafeAPI-Bridge is a Node.js/Express API gateway for AI provider traffic. Its primary responsibility is to keep provider API keys off client devices while enforcing authentication, quota control, rate limiting, IP policy, abuse detection, request validation, usage logging, and optional BYOK split-key flows.
 
-SafeAPI-Bridge is a secure API proxy server designed to protect AI API keys from client-side exposure. It sits between your client applications (mobile, web, backend) and AI providers, ensuring API keys never leave the server.
+## High-Level Design
 
-## System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              CLIENT APPLICATIONS                            │
-├─────────────────┬─────────────────┬─────────────────┬──────────────────────┤
-│   Android App   │    iOS App      │   Web Frontend  │   Backend Service    │
-│   (Kotlin/Java) │    (Swift)      │   (React/Vue)   │   (Node/Python)      │
-└────────┬────────┴────────┬────────┴────────┬────────┴──────────┬───────────┘
-         │                 │                 │                   │
-         │    JWT Token + Request Body + Optional BYOK Headers   │
-         └─────────────────┴─────────────────┴───────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          SAFEAPI-BRIDGE SERVER                              │
-│                                                                             │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │                        MIDDLEWARE PIPELINE                            │  │
-│  │                                                                       │  │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │  │
-│  │  │  Request ID │→ │ Compression │→ │   Helmet    │→ │    HTTPS    │  │  │
-│  │  │  Middleware │  │  (gzip/br)  │  │  (Security) │  │ Enforcement │  │  │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │  │
-│  │         │                                                     │       │  │
-│  │         ▼                                                     ▼       │  │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │  │
-│  │  │    CORS     │→ │ Body Parser │→ │  Timeout    │→ │  Sanitizer  │  │  │
-│  │  │   Config    │  │  (JSON/URL) │  │  Handler    │  │   (XSS)     │  │  │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │  │
-│  │         │                                                     │       │  │
-│  │         ▼                                                     ▼       │  │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │  │
-│  │  │   Logger    │→ │  Security   │→ │    Rate     │→ │  IP Check   │  │  │
-│  │  │  (Morgan)   │  │   Monitor   │  │   Limiter   │  │ (Whitelist) │  │  │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │  │
-│  │         │                                                     │       │  │
-│  │         ▼                                                     ▼       │  │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │  │
-│  │  │  JWT Auth   │→ │ Quota Check │→ │ Split Key   │→ │  Validator  │  │  │
-│  │  │ Middleware  │  │ (Daily/Mo)  │  │  (BYOK)     │  │  (Request)  │  │  │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                        │
-│                                    ▼                                        │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │                           ROUTE HANDLERS                              │  │
-│  │                                                                       │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐ │  │
-│  │  │  /auth   │  │   /api   │  │  /admin  │  │/analytics│  │/split-  │ │  │
-│  │  │  routes  │  │  proxy   │  │  routes  │  │  routes  │  │  key    │ │  │
-│  │  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └─────────┘ │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                        │
-│                                    ▼                                        │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │                            SERVICES                                   │  │
-│  │                                                                       │  │
-│  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐          │  │
-│  │  │ KeyResolution  │  │ ApiForwarding  │  │  SplitKey      │          │  │
-│  │  │    Service     │  │    Service     │  │   Service      │          │  │
-│  │  └────────────────┘  └────────────────┘  └────────────────┘          │  │
-│  │                                                                       │  │
-│  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐          │  │
-│  │  │ RequestQueue   │  │ RetryService   │  │   Analytics    │          │  │
-│  │  │ (Bull/Memory)  │  │ (Backoff/CB)   │  │    Service     │          │  │
-│  │  └────────────────┘  └────────────────┘  └────────────────┘          │  │
-│  │                                                                       │  │
-│  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐          │  │
-│  │  │ UsageTracking  │  │   Webhook      │  │    Cache       │          │  │
-│  │  │    Service     │  │   Service      │  │   Service      │          │  │
-│  │  └────────────────┘  └────────────────┘  └────────────────┘          │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                        │
-│                                    ▼                                        │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │                         DATA LAYER                                    │  │
-│  │                                                                       │  │
-│  │  ┌────────────────────────────────────────────────────────────────┐  │  │
-│  │  │                      PRISMA ORM                                │  │  │
-│  │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │  │  │
-│  │  │  │   User   │ │ ApiUsage │ │ SplitKey │ │  IpRule  │          │  │  │
-│  │  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘          │  │  │
-│  │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐                       │  │  │
-│  │  │  │ Webhook  │ │  Admin   │ │ AuditLog │                       │  │  │
-│  │  │  └──────────┘ └──────────┘ └──────────┘                       │  │  │
-│  │  └────────────────────────────────────────────────────────────────┘  │  │
-│  │                              │                                        │  │
-│  │                              ▼                                        │  │
-│  │  ┌──────────────────────────────────────────────────────────────┐    │  │
-│  │  │  SQLite (dev) / PostgreSQL (prod)                            │    │  │
-│  │  └──────────────────────────────────────────────────────────────┘    │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                     │
-                                     ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         EXTERNAL AI PROVIDERS                               │
-├────────────┬────────────┬────────────┬────────────┬────────────┬───────────┤
-│   OpenAI   │   Gemini   │   Claude   │    Groq    │  Mistral   │    ...    │
-│            │  (Google)  │ (Anthropic)│            │            │ (15 more) │
-└────────────┴────────────┴────────────┴────────────┴────────────┴───────────┘
+```text
+Client Applications
+  - Native mobile apps
+  - Web frontends
+  - Backend services
+        |
+        | HTTPS + JWT + optional BYOK headers
+        v
+SafeAPI-Bridge
+  - Express middleware pipeline
+  - Auth, quota, rate limit, IP rules
+  - Abuse guard and security logging
+  - Provider key resolution
+  - Retry and circuit breaker support
+  - Usage and analytics persistence
+        |
+        | Provider-specific HTTP request
+        v
+External Providers
+  - OpenAI, Gemini, Claude, Groq, Mistral, Z.ai
+  - DeepSeek, Perplexity, Together, OpenRouter, Fireworks
+  - GitHub Models, Replicate, Stability, Fal.ai, ElevenLabs
+  - Brave Search, DeepL, Open-Meteo
 ```
 
-## Directory Structure
+The gateway supports two key-management modes:
 
-```
-SafeAPI-Bridge/
-├── src/
-│   ├── server.js              # Application entry point
-│   ├── config/
-│   │   ├── apis.js            # API endpoints whitelist & headers
-│   │   ├── constants.js       # Application constants
-│   │   ├── env.js             # Environment configuration
-│   │   └── securityPatterns.js # Security detection patterns
-│   ├── controllers/
-│   │   └── proxy.js           # Main proxy controller
-│   ├── db/
-│   │   └── client.js          # Prisma client with connection pooling
-│   ├── middleware/
-│   │   ├── adminAuth.js       # Admin authentication
-│   │   ├── auth.js            # JWT authentication
-│   │   ├── compression.js     # Response compression
-│   │   ├── corsConfig.js      # CORS configuration
-│   │   ├── httpsEnforcement.js # HTTPS redirect
-│   │   ├── inputSanitizer.js  # XSS/injection prevention
-│   │   ├── ipCheck.js         # IP whitelist/blacklist
-│   │   ├── logger.js          # Request logging
-│   │   ├── quotaCheck.js      # User quota enforcement
-│   │   ├── rateLimiter.js     # Rate limiting
-│   │   ├── requestId.js       # Request correlation
-│   │   ├── requestTimeout.js  # Request timeout handler
-│   │   ├── securityMonitor.js # Threat detection
-│   │   └── splitKey.js        # BYOK split-key handling
-│   ├── models/
-│   │   ├── IpRule.js          # IP rule model
-│   │   ├── Usage.js           # Usage model
-│   │   └── User.js            # User model
-│   ├── routes/
-│   │   ├── admin.js           # Admin API routes
-│   │   ├── analytics.js       # Analytics routes
-│   │   ├── auth.js            # Authentication routes
-│   │   ├── proxy.js           # Proxy routes
-│   │   └── splitKey.js        # Split-key management routes
-│   ├── services/
-│   │   ├── analytics.js       # Analytics service
-│   │   ├── apiForwarding.js   # API forwarding with retry/CB
-│   │   ├── auditLog.js        # Audit logging service
-│   │   ├── cacheService.js    # Redis/Memory caching
-│   │   ├── keyResolution.js   # API key resolution
-│   │   ├── requestQueue.js    # Bull queue management
-│   │   ├── retryService.js    # Retry & Circuit Breaker logic
-│   │   ├── splitKey.js        # Split-key cryptography
-│   │   ├── tokenBlacklist.js  # JWT blacklist service
-│   │   ├── usage.js           # Usage tracking service
-│   │   └── webhook.js         # Webhook delivery service
-│   └── utils/
-│       ├── crypto.js          # Cryptographic utilities
-│       ├── errorHandler.js    # Error handling
-│       ├── errorTypes.js      # Custom error classes
-│       ├── lruCache.js        # LRU cache implementation
-│       ├── responseFormatter.js # Response formatting
-│       ├── securityLogger.js  # Security event logging
-│       ├── urlValidator.js    # URL validation
-│       └── validator.js       # Request validation
-├── prisma/
-│   ├── schema.prisma          # Database schema
-│   └── migrations/            # Database migrations
-├── tests/
-│   ├── unit/                  # Unit tests
-│   ├── integration/           # Integration tests
-│   ├── security/              # Security tests
-│   └── setup.js               # Test configuration
-├── docs/                      # Documentation
-├── scripts/                   # Utility scripts
-└── logs/                      # Application logs
+- Server-key mode: provider keys are stored as server environment variables.
+- BYOK split-key mode: users split a provider key, the server stores its encrypted part, and clients send their part through protected headers.
+
+## Runtime Components
+
+| Area | Path | Responsibility |
+|---|---|---|
+| Server entry | `src/server.js` | Express application setup, middleware order, route mounting, graceful shutdown |
+| Routes | `src/routes` | HTTP route definitions and middleware composition |
+| Controllers | `src/controllers` | Request handlers for proxy, admin, and operational flows |
+| Middleware | `src/middleware` | Security, auth, quota, rate limit, CORS, timeout, logging, validation boundaries |
+| Services | `src/services` | Provider forwarding, retries, queue, cache, split-key crypto, analytics, abuse guard |
+| Models | `src/models` | Database access wrappers over Prisma |
+| Database | `src/db`, `prisma` | Prisma client, PostgreSQL schema, migrations |
+| Utilities | `src/utils` | Error handling, validation, response formatting, security logging |
+| Tests | `tests` | Unit, integration, and security coverage |
+
+## Middleware Pipeline
+
+The global middleware order is security-sensitive:
+
+```text
+requestId
+smartCompression
+helmet
+httpsEnforcement
+abuseGuard
+corsConfig
+express.json / express.urlencoded
+requestTimeout
+inputSanitizer
+logger
+securityMonitor
+/api rate limiter
+routes
+notFoundHandler
+errorMiddleware
 ```
 
-## Data Models
+Key design decisions:
 
-### User
-
-Stores application users with quota management.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| id | UUID | Primary key |
-| userId | String | Unique user identifier |
-| appId | String | Application identifier |
-| apiKey | String | Generated API key |
-| dailyQuota | Int | Daily request limit (default: 100) |
-| monthlyQuota | Int | Monthly request limit (default: 3000) |
-| requestsToday | Int | Today's request count |
-| requestsMonth | Int | This month's request count |
-| totalCost | Float | Accumulated API cost |
-| active | Boolean | User status |
-
-### SplitKey
-
-BYOK split-key storage for secure key management.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| id | UUID | Primary key |
-| keyId | String | Public key identifier |
-| apiProvider | String | Target API (openai, gemini, etc.) |
-| serverPart | String | Encrypted server portion |
-| clientPart | String | Client portion hash |
-| decryptionSecret | String | Decryption secret |
-| algorithm | String | Encryption algorithm (AES-256-GCM) |
-| keyVersion | Int | Key rotation version |
-| usageCount | Int | Usage counter |
-| createdBy | String | Creator user ID |
-
-### ApiUsage
-
-Request tracking and analytics.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| id | UUID | Primary key |
-| userId | String | User reference |
-| api | String | API provider |
-| endpoint | String | Called endpoint |
-| statusCode | Int | Response status |
-| tokensUsed | Int | Token count |
-| estimatedCost | Float | Estimated cost |
-| responseTime | Int | Response time (ms) |
-| ipAddress | String | Client IP |
-
-### IpRule
-
-IP whitelist/blacklist rules.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| id | UUID | Primary key |
-| ipAddress | String | IP address or CIDR |
-| type | String | 'whitelist' or 'blacklist' |
-| reason | String | Rule reason |
-| active | Boolean | Rule status |
+- `abuseGuard` runs before body parsing and route handling so scanner probes such as WordPress/PHP paths are dropped early.
+- CORS runs before JSON parsing and application routes.
+- Body size is limited to 2 MB.
+- `/api` has global rate limiting, while provider routes add provider-specific rate limiting.
+- Root and `/health` are excluded from API rate limiting.
+- Error handling is centralized at the end of the Express stack.
 
 ## Request Flow
 
-### Server Key Method
+### Authentication
 
-```
-1. Client → POST /auth/token { userId, appId }
-   └── Server creates/retrieves user, returns JWT
-
-2. Client → POST /api/openai/proxy
-   Headers: Authorization: Bearer <JWT>
-   Body: { endpoint: "/chat/completions", model: "gpt-4", messages: [...] }
-   
-   └── Middleware Pipeline:
-       ├── requestId: Add correlation ID
-       ├── compression: Prepare response compression
-       ├── helmet: Add security headers
-       ├── cors: Validate origin
-       ├── bodyParser: Parse JSON body
-       ├── inputSanitizer: Sanitize inputs
-       ├── logger: Log request
-       ├── securityMonitor: Check for threats
-       ├── rateLimiter: Check rate limits
-       ├── ipCheck: Verify IP allowed
-       ├── authenticateToken: Verify JWT
-       ├── quotaCheck: Verify quota available
-       └── requestQueue: Queue job (if high load/priority)
-
-3. Worker/Server → ApiForwardingService
-   └── Execution Flow:
-       ├── KeyResolution: Get API key (server or BYOK)
-       ├── RetryService: Wrapped with exponential backoff
-       ├── CircuitBreaker: Check provider health
-       └── Forward: HTTP call to OpenAI
-    
-4. OpenAI → Server → Client
-   └── Response forwarded, usage tracked
+```text
+POST /auth/token
+  -> authLimiter
+  -> validateAuthRequest
+  -> UserModel.findOrCreate
+  -> JWT issued for 7 days
 ```
 
-### BYOK Split-Key Method
+The token payload contains `userId`, `appId`, and creation timestamp. Tokens are verified by `authenticateToken` on protected routes.
 
-```
-1. Client → POST /api/split-key/split
-   Headers: Authorization: Bearer <JWT>
-   Body: { originalKey: "sk-...", apiProvider: "openai" }
-   
-   └── Server:
-       ├── Encrypts key with AES-256-GCM
-       ├── Splits into serverPart + clientPart
-       ├── Stores serverPart + decryptionSecret in DB
-       └── Returns keyId + clientPart to client
+### Proxy Request
 
-2. Client → POST /api/openai/proxy
-   Headers:
-     Authorization: Bearer <JWT>
-     X-Partial-Key-Id: <keyId>
-     X-Partial-Key: <clientPart>
-   Body: { endpoint: "/chat/completions", ... }
-   
-   └── Middleware:
-       ├── validateSplitKey: Validate BYOK headers
-       ├── reconstructApiKey: Reconstruct original key in memory
-       └── proxyRequest: Forward with reconstructed key
+```text
+POST /api/:api/proxy
+GET  /api/:api/proxy
+POST /api/:provider
+  -> ipCheck
+  -> authenticateToken
+  -> quotaCheck
+  -> provider rate limiter
+  -> validateSplitKey
+  -> reconstructApiKey
+  -> validateProxyRequest
+  -> addSplitKeySecurityHeaders
+  -> proxyRequest
+  -> usage tracking
 ```
 
-## Security Layers
+The same security chain protects both generic proxy routes and convenience provider routes.
 
-1. **Transport Security**: HTTPS enforcement, HSTS
-2. **Authentication**: JWT tokens with blacklist support
-3. **Authorization**: IP whitelist/blacklist, quota limits
-4. **Input Validation**: Request sanitization, endpoint whitelist
-5. **Rate Limiting**: Per-IP and per-user limits
-6. **Monitoring**: Security event logging, threat detection
-7. **Key Protection**: Server-side keys or BYOK split-key encryption
+### Admin Request
 
-## Supported AI Providers
+```text
+/admin/*
+  -> adminLimiter
+  -> adminAuth using X-Admin-Key
+  -> controller action
+  -> audit/security logging where applicable
+```
 
-| Provider | Base URL | Auth Method |
-|----------|----------|-------------|
-| OpenAI | api.openai.com/v1 | Bearer token |
-| Gemini | generativelanguage.googleapis.com/v1beta | Query param |
-| Claude | api.anthropic.com/v1 | x-api-key header |
-| Groq | api.groq.com/openai/v1 | Bearer token |
-| Mistral | api.mistral.ai/v1 | Bearer token |
-| DeepSeek | api.deepseek.com | Bearer token |
-| Perplexity | api.perplexity.ai | Bearer token |
-| Together | api.together.xyz/v1 | Bearer token |
-| OpenRouter | openrouter.ai/api/v1 | Bearer token |
-| Fireworks | api.fireworks.ai/inference/v1 | Bearer token |
-| GitHub Models | models.github.ai/inference | Bearer token |
-| Replicate | api.replicate.com/v1 | Token header |
-| Stability | api.stability.ai | Bearer token |
-| Fal.ai | fal.ai/api | Bearer token |
-| ElevenLabs | api.elevenlabs.io/v1 | xi-api-key header |
-| Brave Search | api.search.brave.com/res/v1 | Subscription token |
-| DeepL | api-free.deepl.com/v2 | DeepL-Auth-Key |
-| Open-Meteo | api.open-meteo.com/v1 | No auth required |
+`adminAuth` uses a timing-safe comparison against `ADMIN_API_KEY` and tracks failed authentication attempts.
+
+## Public and Protected Surfaces
+
+| Surface | Auth Requirement | Notes |
+|---|---|---|
+| `GET /` | None | Minimal service status |
+| `GET /health` | None; optional admin key | Public response is minimal; admin key can expose more operational detail |
+| `POST /auth/token` | Request validation and auth rate limit | Creates or retrieves a user and returns JWT |
+| `/api/*` proxy routes | JWT, IP policy, quota, rate limits | Supports server-key and BYOK modes |
+| `/api/split-key/*` | JWT | Split-key management for authenticated users |
+| `/analytics/my-stats` | JWT | Current user's analytics |
+| `/analytics/user/:userId` | JWT or admin key for other users | Users can read only their own stats unless admin key is supplied |
+| `/analytics/overview`, `/analytics/costs`, `/analytics/errors` | JWT + `X-Admin-Key` | System-wide analytics |
+| `/admin/*` | `X-Admin-Key` | Administrative operations |
+| `/api-docs`, `/api-docs.json`, `/api-docs.yaml` | `X-Admin-Key` | API docs are intentionally not public |
+
+## Security Architecture
+
+### Authentication and Authorization
+
+- Client access uses JWT bearer tokens.
+- Admin access uses `X-Admin-Key` and a stricter admin rate limiter.
+- Admin failed attempts are tracked and can trigger temporary lockout.
+- Users can access only their own split keys and user analytics unless an admin key is present.
+
+### Network and Origin Controls
+
+- `helmet` applies baseline HTTP security headers.
+- HTTPS enforcement is active in production.
+- CORS uses exact origin matching from `ALLOWED_ORIGINS`.
+- Requests without an `Origin` header are allowed only when `ALLOW_MOBILE_NO_ORIGIN` is not set to `false`.
+- `trust proxy` is enabled so client IPs are resolved correctly behind a reverse proxy.
+
+### Rate Limiting and Abuse Controls
+
+- `/api` has a configurable IP-based global limiter.
+- Authentication routes have a stricter brute-force limiter.
+- Admin routes have a strict limiter.
+- Provider routes have provider-specific per-minute limiters.
+- `abuseGuard` detects scanner probes such as WordPress paths, `.php` probes, double-slash paths, path traversal probes, and scanner user agents.
+- Scanner probes are answered with empty `404` responses and can lead to temporary in-memory IP blocks.
+- Active temporary blocks are visible through `/admin/security/blocks` and removable through `DELETE /admin/security/blocks/:ip`.
+
+### Persistent IP Policy
+
+`ipCheck` uses the `IpRule` model to enforce whitelist and blacklist entries stored in PostgreSQL.
+
+- Blacklisted IPs are denied.
+- Whitelist behavior depends on the model implementation and active rules.
+- IP verification fails closed with `503` if the rule check cannot be completed.
+
+### Key Protection
+
+Server-key mode:
+
+- Provider keys are loaded from environment variables.
+- Keys never need to be shipped in client applications.
+
+BYOK split-key mode:
+
+- User submits a provider key through `/api/split-key/split`.
+- The server encrypts and stores its part in PostgreSQL.
+- The client stores and sends its part through `X-Partial-Key-Id` and `X-Partial-Key`.
+- Reconstruction happens in memory during the proxy request.
+
+## Data Model Summary
+
+| Model | Purpose |
+|---|---|
+| `User` | Application user, app ID, generated API key, quota counters, status |
+| `ApiUsage` | Request usage records, status, token/cost estimate, latency, IP, user agent |
+| `IpRule` | Persistent IP whitelist and blacklist rules |
+| `Webhook` | Webhook targets, events, retry settings, delivery statistics |
+| `Admin` | Optional admin user representation |
+| `SplitKey` | BYOK split-key metadata and encrypted server-side material |
+| `AuditLog` | Administrative operation audit records |
+
+The active Prisma datasource is PostgreSQL.
+
+## Provider Forwarding
+
+Provider routing is configured through `src/config/env.js` and provider metadata. The proxy validates requested providers and endpoints, resolves the correct API key, applies timeout settings, forwards the request, and records usage.
+
+Provider timeout configuration can be set globally with `UPSTREAM_TIMEOUT_MS` or per provider, for example:
+
+```env
+OPENAI_TIMEOUT_MS=60000
+GEMINI_TIMEOUT_MS=60000
+CLAUDE_TIMEOUT_MS=90000
+GROQ_TIMEOUT_MS=30000
+```
+
+## Queue, Retry, and Cache
+
+- `requestQueue.js` initializes Bull when `REDIS_URL` is set and falls back to memory when Redis is unavailable.
+- `retryService.js` provides exponential backoff, jitter, and circuit breaker behavior for provider calls.
+- `cacheService.js` provides Redis-backed or in-memory cache behavior with TTL and tag support.
+- Redis is recommended for production environments that need shared state across multiple instances.
+
+## Observability
+
+The application writes structured operational and security logs through Winston.
+
+Important log categories:
+
+- Request logs from Morgan/Winston integration.
+- Security events such as scanner probes, temporary blocks, failed admin auth, rate-limit events, and split-key operations.
+- Error logs from centralized error handling and process-level exception handlers.
+- Admin operation audit logs.
+
+Operational endpoints:
+
+```text
+GET /health
+GET /admin/metrics
+GET /admin/metrics/prometheus
+GET /admin/security/blocks
+```
+
+Admin endpoints require `X-Admin-Key`.
+
+## Operational Boundaries
+
+- Temporary abuse blocks are process-local memory and reset on restart.
+- Token blacklist behavior is service-backed but should be reviewed before relying on cross-instance logout semantics.
+- Queue memory fallback is not durable. Use Redis for multi-instance or restart-safe queue behavior.
+- Files under `logs/` may not persist on stateless platforms unless log shipping or persistent volumes are configured.
+- API documentation endpoints are protected but still reachable if a valid admin key is presented.
+
+## Repository Layout
+
+```text
+SafeAPI-Bridge/
+  src/
+    config/        Environment and provider configuration
+    controllers/   Request handlers
+    db/            Prisma client
+    middleware/    Express middleware
+    models/        Data access models
+    routes/        Route definitions
+    services/      Business and infrastructure services
+    utils/         Shared utilities
+    server.js      Application entry point
+  prisma/
+    schema.prisma  PostgreSQL schema
+    migrations/    Database migrations
+  tests/
+    unit/          Fast unit tests
+    integration/   Integration tests
+    security/      Security-focused tests
+  docs/            Project documentation
+  scripts/         Operational scripts
+  openapi.yaml     OpenAPI specification
+  README.md        Project overview and quick start
+```

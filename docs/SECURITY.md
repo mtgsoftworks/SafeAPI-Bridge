@@ -1,421 +1,243 @@
-# SafeAPI-Bridge Security Guide
+﻿# Security Guide
 
-## Overview
+SafeAPI-Bridge is designed as a defense-in-depth proxy for AI provider traffic. This guide documents the security model, operational controls, and production requirements.
 
-SafeAPI-Bridge implements multiple layers of security to protect API keys and prevent abuse. This document details the security architecture and best practices.
+## Security Model
 
----
+The service protects three main assets:
 
-## Security Architecture
+- Provider API keys stored in server environment variables or split-key records.
+- Client JWTs used to access proxy and analytics endpoints.
+- Administrative capabilities exposed through `/admin/*` and protected documentation routes.
 
-### Defense in Depth
+Primary controls:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    SECURITY LAYERS                          │
-├─────────────────────────────────────────────────────────────┤
-│  Layer 1: Transport Security                                │
-│  ├── HTTPS Enforcement (production)                         │
-│  ├── HSTS Headers (1 year, includeSubDomains, preload)     │
-│  └── TLS 1.2+ only                                         │
-├─────────────────────────────────────────────────────────────┤
-│  Layer 2: Request Validation                                │
-│  ├── CORS Origin Validation                                 │
-│  ├── Content-Type Verification                              │
-│  ├── Body Size Limits (2MB)                                 │
-│  └── Request Timeout (30s default)                          │
-├─────────────────────────────────────────────────────────────┤
-│  Layer 3: Input Sanitization                                │
-│  ├── XSS Prevention                                         │
-│  ├── SQL Injection Detection                                │
-│  ├── Command Injection Detection                            │
-│  └── Path Traversal Prevention                              │
-├─────────────────────────────────────────────────────────────┤
-│  Layer 4: Authentication                                    │
-│  ├── JWT Token Verification                                 │
-│  ├── Token Blacklist (logout support)                       │
-│  └── Token Expiration (7 days default)                      │
-├─────────────────────────────────────────────────────────────┤
-│  Layer 5: Authorization                                     │
-│  ├── IP Whitelist/Blacklist                                 │
-│  ├── Endpoint Whitelist per API                             │
-│  ├── User Quota Enforcement                                 │
-│  └── Admin Key Verification                                 │
-├─────────────────────────────────────────────────────────────┤
-│  Layer 6: Rate Limiting                                     │
-│  ├── Global Rate Limits (100/hour default)                  │
-│  ├── Auth Endpoint Limits (10/minute)                       │
-│  └── Per-IP Tracking                                        │
-├─────────────────────────────────────────────────────────────┤
-│  Layer 7: Monitoring & Logging                              │
-│  ├── Security Event Logging                                 │
-│  ├── Suspicious Activity Detection                          │
-│  ├── Audit Logging (admin actions)                          │
-│  └── Request Correlation (X-Request-ID)                     │
-├─────────────────────────────────────────────────────────────┤
-│  Layer 8: Reliability (Circuit Breaker)                     │
-│  ├── Automatic Failover                                     │
-│  ├── Error Persistence Tracking                             │
-│  └── Rapid Fault Response                                   │
-└─────────────────────────────────────────────────────────────┘
+- HTTPS enforcement in production.
+- Helmet security headers.
+- Strict CORS allowlist for browser origins.
+- Mobile no-origin support when explicitly enabled.
+- JWT verification and logout blacklist.
+- Admin key verification using timing-safe comparison.
+- IP whitelist and blacklist rules.
+- Endpoint allowlists per provider.
+- Global, auth, admin, and provider-specific rate limits.
+- Quota checks per user.
+- Abuse guard for scanner/probe traffic.
+- Structured security and audit logs.
+- SSRF validation for webhook URLs.
+
+## Production Requirements
+
+Set the following in production:
+
+```env
+NODE_ENV=production
+JWT_SECRET=<64-plus-character-random-secret>
+ADMIN_API_KEY=<strong-random-admin-key>
+DATABASE_URL=postgresql://...
+ALLOWED_ORIGINS=https://example.com,https://www.example.com
+ALLOW_MOBILE_NO_ORIGIN=true
+ABUSE_GUARD_ENABLED=true
 ```
 
----
+Do not use development or sample values in production.
+
+If a secret is exposed in chat, tickets, screenshots, browser history, logs, CI output, or source control, rotate it immediately.
 
 ## Authentication
 
-### JWT Token Security
+### JWT
 
-**Token Structure:**
+JWTs are signed with `JWT_SECRET` and expire according to the configured application value. The default runtime value is currently seven days.
 
-- Algorithm: HS256
-- Expiration: 7 days (configurable)
-- Payload: `{ userId, appId, createdAt, iat, exp }`
+JWT-protected endpoints require:
 
-**Best Practices:**
-
-- Generate strong `JWT_SECRET` (64+ characters)
-- Rotate secrets periodically
-- Use token blacklist for logout
-- Validate token on every request
-
-**Token Blacklist:**
-
-- In-memory LRU cache for performance
-- Persistent storage in database
-- Automatic cleanup of expired entries
-
-### Admin Authentication
-
-Admin endpoints require both:
-
-1. Valid JWT token
-2. `X-Admin-Key` header matching `ADMIN_API_KEY`
-
-```javascript
-// Admin endpoint protection
-if (adminKey !== process.env.ADMIN_API_KEY) {
-  return res.status(403).json({ error: 'Forbidden' });
-}
+```http
+Authorization: Bearer <JWT_TOKEN>
 ```
 
----
+Logout uses an in-memory blacklist. In multi-instance deployments or after process restarts, previously blacklisted tokens may no longer be known to all instances. For high-security deployments, use shorter JWT lifetime and consider a persistent blacklist store.
 
-## BYOK Split-Key Security
+### Admin Key
 
-### Key Splitting Process
+Admin endpoints and documentation require:
 
-```
-Original API Key: sk-abc123xyz789...
-                      │
-                      ▼
-┌─────────────────────────────────────────┐
-│         AES-256-GCM Encryption          │
-│  ┌─────────────────────────────────┐   │
-│  │ 1. Generate random IV (12 bytes) │   │
-│  │ 2. Generate encryption key       │   │
-│  │ 3. Encrypt original key          │   │
-│  │ 4. Split encrypted data          │   │
-│  └─────────────────────────────────┘   │
-└─────────────────────────────────────────┘
-                      │
-          ┌───────────┴───────────┐
-          ▼                       ▼
-   ┌─────────────┐         ┌─────────────┐
-   │ Server Part │         │ Client Part │
-   │  (Database) │         │  (Backend)  │
-   │             │         │             │
-   │ - Encrypted │         │ - Encrypted │
-   │   portion   │         │   portion   │
-   │ - Decrypt   │         │ - Hash for  │
-   │   secret    │         │   validation│
-   └─────────────┘         └─────────────┘
+```http
+X-Admin-Key: <ADMIN_API_KEY>
 ```
 
-### Security Properties
+Admin comparison is timing-safe. Missing or invalid admin keys are logged and counted by failed-auth tracking.
 
-1. **Key Never Stored in Plain Text**: Original key is immediately encrypted
-2. **Split Storage**: No single location has the complete key
-3. **Memory-Only Reconstruction**: Full key exists only in memory during request
-4. **Per-Request Reconstruction**: Key is reconstructed and discarded per request
-5. **Client Part Validation**: Hash verification prevents tampering
+Protected documentation:
 
-### Usage Tracking
+- `/api-docs`
+- `/api-docs.json`
+- `/api-docs.yaml`
 
-- Each split key has usage counter
-- Last used timestamp tracked
-- Can be deactivated without deletion
+## Authorization
 
----
+### Endpoint Allowlist
 
-## Input Validation
-
-### Endpoint Whitelist
-
-Each API provider has a strict whitelist of allowed endpoints:
-
-```javascript
-const allowedEndpoints = {
-  openai: [
-    '/chat/completions',
-    '/completions',
-    '/embeddings',
-    '/models'
-  ],
-  gemini: [
-    '/models/gemini-3-pro:generateContent',
-    '/models/gemini-3-flash:generateContent',
-    '/models/gemini-1.5-pro:generateContent',
-    // ... more endpoints
-  ]
-  // ... other providers
-};
-```
-
-**Protection Against:**
-
-- Unauthorized endpoint access
-- API abuse through unexpected endpoints
-- Data exfiltration attempts
-
-### Request Sanitization
-
-The `inputSanitizer` middleware detects and blocks:
-
-| Attack Type | Detection Pattern |
-|-------------|-------------------|
-| SQL Injection | `SELECT`, `UNION`, `DROP`, `--`, etc. |
-| Command Injection | `; rm`, `| cat`, backticks, etc. |
-| XSS | `<script>`, `javascript:`, event handlers |
-| Path Traversal | `../`, `..\\`, absolute paths |
-
-```javascript
-// Example detection
-const sqlPatterns = [
-  /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER)\b)/gi,
-  /(--|;|\/\*|\*\/)/g,
-  /(\bOR\b|\bAND\b).*[=<>]/gi
-];
-```
-
----
-
-## Rate Limiting
-
-### Configuration
-
-```javascript
-{
-  windowMs: 3600000,      // 1 hour window
-  maxRequests: 100,       // 100 requests per window
-  message: 'Too many requests'
-}
-```
-
-### Headers
-
-```
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1705142400
-```
-
-### Per-Endpoint Limits
-
-| Endpoint Type | Limit |
-|---------------|-------|
-| Auth endpoints | 10/minute |
-| API proxy | 100/hour |
-| Admin endpoints | 50/hour |
-
----
-
-## IP Security
+Each provider has an allowlist in `src/config/apis.js`. Requests outside that allowlist are rejected before forwarding.
 
 ### IP Rules
 
-```javascript
-// IpRule model
-{
-  ipAddress: '192.168.1.100',  // or CIDR: '192.168.1.0/24'
-  type: 'whitelist',           // or 'blacklist'
-  reason: 'Office network',
-  active: true
-}
+IP rules are stored in the database and managed through `/admin/ip-rules`.
+
+Behavior:
+
+- No rule for an IP means allowed by default.
+- Blacklist rules take precedence.
+- If an IP has an active whitelist rule and no blacklist rule, it is allowed.
+- Current rule matching is exact IP matching.
+
+Use persistent blacklist rules for IPs that must remain blocked after restart.
+
+### Quotas
+
+User quotas are enforced before proxying. Counters are incremented asynchronously during usage tracking. For high-volume deployments, review race conditions around parallel requests and consider transactional quota reservations.
+
+## Abuse Guard
+
+The abuse guard is an early middleware that runs before body parsing and normal routing. It blocks common scanner traffic with minimal responses and without changing mobile client contracts.
+
+Detected probe signals include:
+
+- WordPress paths such as `/wp-content`, `/wp-includes`, `/wp-login.php`, `/xmlrpc.php`.
+- PHP probing such as `/wp-blog.php` or `/admin.php`.
+- Double-slash paths such as `//wp-includes/js/jquery/`.
+- Path traversal patterns.
+- Known scanner user agents.
+- Missing user-agent only when combined with scanner path signals.
+
+Default configuration:
+
+```env
+ABUSE_GUARD_ENABLED=true
+ABUSE_GUARD_STRIKE_THRESHOLD=5
+ABUSE_GUARD_WINDOW_MS=600000
+ABUSE_GUARD_BLOCK_MS=3600000
+ABUSE_GUARD_BLOCK_AUTHENTICATED=false
 ```
 
-### Behavior
+Behavior:
 
-1. **Blacklist Check**: Blocked IPs receive 403 immediately
-2. **Whitelist Mode**: If any whitelist rules exist, only whitelisted IPs allowed
-3. **Dynamic Updates**: Rules can be added/removed via admin API
+- Scanner probes receive a minimal `404`.
+- Repeated probes create an in-memory temporary block.
+- Authenticated application paths are not blocked by temporary blocks when `ABUSE_GUARD_BLOCK_AUTHENTICATED=false`.
+- Scanner paths are still blocked even if a caller sends a bearer token.
+- Blocks reset on process restart.
 
----
+Admin operations:
 
-## Security Monitoring
-
-### Threat Detection
-
-The `securityMonitor` middleware detects:
-
-- **Injection Attempts**: SQL, Command, XSS
-- **Brute Force**: Multiple failed auth attempts
-- **Suspicious Patterns**: Unusual request patterns
-- **Scanner Detection**: Known vulnerability scanner signatures
-
-### Logging
-
-Security events are logged to:
-
-- `logs/security-YYYY-MM-DD.log`
-- Console (development)
-- Webhook notifications (if configured)
-
-**Log Format:**
-
-```json
-{
-  "timestamp": "2025-01-13T10:00:00.000Z",
-  "level": "warn",
-  "eventType": "SUSPICIOUS_ACTIVITY",
-  "activityType": "SQL_INJECTION",
-  "ip": "192.168.1.100",
-  "path": "/api/openai/proxy",
-  "userId": "user-123",
-  "severity": "high"
-}
+```bash
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/admin/security/blocks
+curl -X DELETE -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/admin/security/blocks/52.138.6.165
 ```
 
----
+## Rate Limits
 
-## Audit Logging
+Default limits:
 
-### Admin Actions Tracked
+- Global API routes: configured by `RATE_LIMIT_WINDOW_MS` and `RATE_LIMIT_MAX_REQUESTS`.
+- Auth routes: strict auth limiter.
+- Admin routes: strict admin limiter.
+- Provider proxy routes: provider-specific limiter.
 
-- User creation/modification/deletion
-- IP rule changes
-- Webhook configuration changes
-- Split key operations
-- Quota adjustments
+Rate limit headers use the standard `RateLimit-*` format from `express-rate-limit`.
 
-**Audit Log Entry:**
+## CORS and Mobile Clients
 
-```json
-{
-  "action": "user.update",
-  "adminKey": "hashed-admin-key",
-  "ipAddress": "192.168.1.100",
-  "details": {
-    "userId": "user-123",
-    "changes": { "dailyQuota": 200 }
-  },
-  "success": true,
-  "createdAt": "2025-01-13T10:00:00.000Z"
-}
+Production browser origins should be explicit:
+
+```env
+ALLOWED_ORIGINS=https://example.com,https://www.example.com
 ```
 
----
+Native mobile apps commonly send no `Origin` header. Keep this enabled only if required:
 
-## Security Headers
-
-### Helmet Configuration
-
-```javascript
-helmet({
-  hsts: {
-    maxAge: 31536000,        // 1 year
-    includeSubDomains: true,
-    preload: true
-  },
-  contentSecurityPolicy: false  // Disabled for API
-})
+```env
+ALLOW_MOBILE_NO_ORIGIN=true
 ```
 
-### Response Headers
+Do not use wildcard origins in production.
 
-```
-Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-X-Content-Type-Options: nosniff
-X-Frame-Options: DENY
-X-XSS-Protection: 1; mode=block
-X-Request-ID: uuid-for-tracing
-```
+## BYOK Split-Key Security
 
----
+BYOK split-key mode encrypts the original provider key and stores split components. It avoids storing the original provider key as plaintext.
 
-## Best Practices
+Important operational guidance:
 
-### Production Deployment
+- Treat the database as sensitive key material.
+- Restrict database access to the application and approved operators.
+- Encrypt backups at rest.
+- Rotate provider keys if split-key records or database backups are exposed.
+- Do not expose `clientPart` in client-side web code, public logs, or analytics systems.
 
-1. **Environment Variables**
-   - Never commit secrets to repository
-   - Use strong, random values for JWT_SECRET and ADMIN_API_KEY
-   - Rotate secrets periodically
+## Webhook SSRF Protection
 
-2. **HTTPS**
-   - Always use HTTPS in production
-   - Configure TLS 1.2+ only
-   - Use valid SSL certificates
+Webhook URLs are validated during creation and before sending.
 
-3. **Database**
-   - Use PostgreSQL for production
-   - Enable SSL for database connections
-   - Regular backups
+Blocked targets include:
 
-4. **Monitoring**
-   - Set up alerting for security events
-   - Monitor rate limit hits
-   - Track failed authentication attempts
+- Localhost and loopback addresses.
+- RFC1918 private ranges.
+- Cloud metadata service IPs.
+- Unsupported protocols.
+- Redirect-based SSRF via `maxRedirects: 0`.
 
-5. **Updates**
-   - Keep dependencies updated
-   - Monitor security advisories
-   - Apply patches promptly
+For high-security deployments, prefer webhooks to approved vendor domains and monitor failed webhook events.
 
-### Client Integration
+## Logging and Audit
 
-1. **Token Storage**
-   - Store JWT securely (Keychain/Keystore)
-   - Never log tokens
-   - Handle token expiration gracefully
+Security events are written through the structured security logger. File logging is disabled in light mode.
 
-2. **BYOK Keys**
-   - Store client part in secure backend
-   - Never expose in client-side code
-   - Use environment variables
+Admin operations are also recorded in `AuditLog` where applicable.
 
-3. **Error Handling**
-   - Don't expose internal errors to users
-   - Log errors server-side
-   - Implement retry with backoff
+Monitor for:
 
----
+- `FAILED_AUTH`
+- `SUSPICIOUS_ACTIVITY`
+- `SCANNER_PROBE_DETECTED`
+- `IP_TEMP_BLOCKED`
+- `BLOCKED_REQUEST`
+- `RATE_LIMIT_EXCEEDED`
+- `SSRF_ATTEMPT`
+- `ADMIN_OPERATION`
 
 ## Incident Response
 
-### Suspected Breach
+### If an admin key or JWT secret is exposed
 
-1. **Immediate Actions**
-   - Rotate JWT_SECRET (invalidates all tokens)
-   - Rotate ADMIN_API_KEY
-   - Review audit logs
-   - Check for unauthorized API usage
+1. Rotate `ADMIN_API_KEY` and `JWT_SECRET` immediately.
+2. Restart all running instances.
+3. Invalidate or reissue mobile/client tokens as needed.
+4. Review audit logs and security logs.
 
-2. **Investigation**
-   - Analyze security logs
-   - Identify affected users
-   - Determine attack vector
+### If a provider key is exposed
 
-3. **Remediation**
-   - Patch vulnerability
-   - Notify affected users
-   - Update security rules
+1. Revoke the provider key at the provider console.
+2. Replace the environment variable or BYOK split key.
+3. Review `ApiUsage` and provider-side usage logs.
+4. Add temporary IP blocks or persistent IP rules if abuse is ongoing.
 
-### Key Compromise
+### If scanner traffic spikes
 
-If an API key is compromised:
+1. Confirm abuse guard is enabled.
+2. Review `/admin/security/blocks`.
+3. Persistently blacklist repeat hostile IPs if appropriate.
+4. Consider upstream firewall/WAF rules for volumetric attacks.
 
-1. Revoke key at provider
-2. Deactivate split key: `DELETE /api/split-key/:keyId`
-3. Create new split key
-4. Update client configuration
+## Production Checklist
+
+- [ ] `NODE_ENV=production`.
+- [ ] Strong `JWT_SECRET` and `ADMIN_API_KEY` generated and stored only in the deployment secret store.
+- [ ] Provider keys rotated after any exposure.
+- [ ] `ALLOWED_ORIGINS` restricted to production domains.
+- [ ] `ALLOW_MOBILE_NO_ORIGIN` set intentionally for native apps.
+- [ ] Abuse guard enabled.
+- [ ] `/api-docs*` protected by admin key.
+- [ ] Database uses PostgreSQL and restricted network access.
+- [ ] Backups encrypted and access controlled.
+- [ ] Logs monitored for failed auth, scanner probes, and rate limits.
+- [ ] Dependency audit reviewed before release.

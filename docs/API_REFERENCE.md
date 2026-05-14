@@ -1,54 +1,107 @@
-# SafeAPI-Bridge API Reference
+﻿# API Reference
 
-## Base URL
+This document describes the public, authenticated, admin, and documentation endpoints exposed by SafeAPI-Bridge.
 
+## Base URLs
+
+```text
+Local:      http://localhost:3000
+Production: https://api.example.com
 ```
-Development: http://localhost:3000
-Production:  https://your-domain.com
+
+## Authentication Headers
+
+Client-protected endpoints use JWT:
+
+```http
+Authorization: Bearer <JWT_TOKEN>
+```
+
+Admin endpoints and protected documentation use:
+
+```http
+X-Admin-Key: <ADMIN_API_KEY>
+```
+
+Some analytics admin endpoints require both JWT and `X-Admin-Key` because they are mounted under JWT-protected analytics routes.
+
+## Public Endpoints
+
+### GET /
+
+Returns minimal service information.
+
+```json
+{
+  "service": "SafeAPI-Bridge",
+  "status": "running",
+  "message": "Server is healthy. Use /health for detailed status."
+}
+```
+
+### GET /health
+
+Returns minimal health data publicly. Detailed provider and infrastructure details are returned only when a valid `X-Admin-Key` is provided.
+
+Public response:
+
+```json
+{
+  "status": "healthy",
+  "timestamp": "2026-05-14T10:00:00.000Z"
+}
+```
+
+Admin response includes provider configuration status, database health, queue stats, and summary counts.
+
+## Protected Documentation
+
+### GET /api-docs
+
+Swagger UI. Requires `X-Admin-Key`.
+
+### GET /api-docs.json
+
+Raw OpenAPI JSON. Requires `X-Admin-Key`.
+
+```bash
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/api-docs.json
+```
+
+### GET /api-docs.yaml
+
+Raw OpenAPI YAML. Requires `X-Admin-Key`.
+
+```bash
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/api-docs.yaml
 ```
 
 ## Authentication
 
-All protected endpoints require a JWT token in the Authorization header:
-
-```
-Authorization: Bearer <JWT_TOKEN>
-```
-
-Admin endpoints additionally require:
-
-```
-X-Admin-Key: <ADMIN_API_KEY>
-```
-
----
-
-## Authentication Endpoints
-
 ### POST /auth/token
 
-Generate a new JWT token. Automatically creates user if not exists.
+Creates or retrieves a user and returns a JWT.
 
-**Request:**
+Request:
 
 ```json
 {
   "userId": "user-123",
-  "appId": "my-android-app"
+  "appId": "calm-mobile-app"
 }
 ```
 
-**Response:**
+Response:
 
 ```json
 {
   "success": true,
-  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "token": "<JWT_TOKEN>",
   "expiresIn": "7 days",
   "tokenType": "Bearer",
   "user": {
     "userId": "user-123",
-    "appId": "my-android-app",
+    "appId": "calm-mobile-app",
     "dailyQuota": 100,
     "monthlyQuota": 3000,
     "requestsToday": 0,
@@ -57,503 +110,245 @@ Generate a new JWT token. Automatically creates user if not exists.
 }
 ```
 
+Notes:
+
+- This route is rate limited.
+- Production deployments should treat `userId` and `appId` as application identifiers, not as strong end-user authentication by themselves.
+
 ### GET /auth/verify
 
-Verify if the current token is valid.
-
-**Headers:**
-
-```
-Authorization: Bearer <JWT_TOKEN>
-```
-
-**Response:**
-
-```json
-{
-  "valid": true,
-  "user": {
-    "userId": "user-123",
-    "appId": "my-android-app"
-  },
-  "message": "Token is valid"
-}
-```
+Validates a JWT.
 
 ### POST /auth/logout
 
-Revoke the current token (adds to blacklist).
-
-**Headers:**
-
-```
-Authorization: Bearer <JWT_TOKEN>
-```
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "message": "Logged out successfully. Token has been revoked.",
-  "userId": "user-123"
-}
-```
+Adds the current JWT to the in-memory token blacklist until expiration.
 
 ### GET /auth/token-info
 
-Get detailed information about the current token.
+Returns token issue time, expiration time, and blacklist status.
 
-**Headers:**
+## Proxy API
 
-```
-Authorization: Bearer <JWT_TOKEN>
-```
+### POST /api/:provider/proxy
 
-**Response:**
+Forwards a request to a configured provider endpoint.
 
-```json
-{
-  "user": {
-    "userId": "user-123",
-    "appId": "my-android-app"
-  },
-  "issuedAt": "2025-01-13T10:00:00.000Z",
-  "expiresAt": "2025-01-20T10:00:00.000Z",
-  "expiresInSeconds": 604800,
-  "expiresInHours": "168.00",
-  "isBlacklisted": false
-}
-```
+Path parameter:
 
----
+| Name | Description |
+| --- | --- |
+| `provider` | One of the supported provider keys in `src/config/apis.js`, such as `openai`, `gemini`, `claude`, `groq`, `mistral`, `zai`, `deepseek`, `perplexity`, `together`, `openrouter`, `fireworks`, `github`, `replicate`, `stability`, `fal`, `elevenlabs`, `brave`, `deepl`, or `openmeteo`. |
 
-## Proxy Endpoints
+Server-key headers:
 
-### POST /api/:api/proxy
-
-Main proxy endpoint for AI API requests.
-
-**Path Parameters:**
-
-- `api`: API provider name (openai, gemini, claude, groq, mistral, zai, deepseek, perplexity, together, openrouter, fireworks, github, replicate, stability, fal, elevenlabs, brave, deepl, openmeteo)
-
-**Headers (Server Key Method):**
-
-```
+```http
 Authorization: Bearer <JWT_TOKEN>
 Content-Type: application/json
 ```
 
-**Headers (BYOK Split-Key Method):**
+BYOK split-key headers:
 
-```
+```http
 Authorization: Bearer <JWT_TOKEN>
 Content-Type: application/json
-X-Partial-Key-Id: sk-myapp-user123-abc123
+X-Partial-Key-Id: <KEY_ID>
 X-Partial-Key: <CLIENT_PART>
 ```
 
-**Request Body (OpenAI Example):**
+OpenAI-style example:
 
 ```json
 {
   "endpoint": "/chat/completions",
-  "model": "gpt-4",
+  "model": "gpt-4o-mini",
   "messages": [
-    { "role": "user", "content": "Hello, world!" }
+    { "role": "user", "content": "Write a short breathing exercise." }
   ],
   "temperature": 0.7
 }
 ```
 
-**Request Body (Gemini Example):**
+Gemini example:
 
 ```json
 {
-  "endpoint": "/models/gemini-3-flash:generateContent",
+  "endpoint": "/models/gemini-2.5-flash:generateContent",
   "contents": [
     {
       "parts": [
-        { "text": "Explain quantum computing in simple terms." }
+        { "text": "Explain mindful breathing in simple terms." }
       ]
     }
-  ],
-  "generationConfig": {
-    "maxOutputTokens": 1024,
-    "temperature": 0.7
-  }
-}
-```
-
-**Request Body (Claude Example):**
-
-```json
-{
-  "endpoint": "/messages",
-  "model": "claude-sonnet-5-20260203",
-  "max_tokens": 1024,
-  "messages": [
-    { "role": "user", "content": "What is the meaning of life?" }
   ]
 }
 ```
 
-**Response:**
-The response is transparently forwarded from the AI provider.
+Response:
 
-### GET /api/:api/endpoints
+- Provider responses are forwarded transparently.
+- Provider errors are normalized by the proxy error handler.
+- Usage is tracked asynchronously.
 
-Get list of allowed endpoints for a specific API.
+### GET /api/:provider/proxy
 
-**Response:**
+Forwards a GET request to an allowed provider endpoint. The provider endpoint must be supplied as `?endpoint=/path`.
 
-```json
-{
-  "api": "OPENAI",
-  "configured": true,
-  "baseUrl": "https://api.openai.com/v1",
-  "allowedEndpoints": [
-    "/chat/completions",
-    "/completions",
-    "/embeddings",
-    "/models"
-  ],
-  "message": "API is configured and ready to use"
-}
-```
+### POST /api/:provider
 
----
+Convenience route equivalent to `POST /api/:provider/proxy` for supported providers.
 
-## Split-Key (BYOK) Endpoints
+### GET /api/:provider/endpoints
+
+Returns the endpoint allowlist for a provider. Requires JWT.
+
+## BYOK Split-Key API
 
 ### POST /api/split-key/split
 
-Create a new split key for BYOK usage.
+Splits and stores a provider API key for BYOK usage.
 
-**Request:**
+Request:
 
 ```json
 {
-  "originalKey": "sk-your-api-key-here",
+  "originalKey": "<provider-api-key>",
   "apiProvider": "openai",
-  "keyId": "my-custom-key-id",
-  "description": "Production key for mobile app"
+  "description": "Mobile production OpenAI key"
 }
 ```
 
-**Response:**
-
-```json
-{
-  "success": true,
-  "message": "API key split successfully",
-  "data": {
-    "keyId": "my-custom-key-id",
-    "apiProvider": "openai",
-    "clientPart": "encrypted-client-part-base64",
-    "algorithm": "AES-256-GCM",
-    "createdAt": "2025-01-13T10:00:00.000Z",
-    "instructions": {
-      "storage": "Store clientPart securely in your backend",
-      "usage": "Include X-Partial-Key-Id and X-Partial-Key headers"
-    }
-  }
-}
-```
+Response includes `keyId` and `clientPart`. Store `clientPart` securely and send it in `X-Partial-Key` when proxying.
 
 ### GET /api/split-key
 
-List all split keys for the current user.
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "keys": [
-    {
-      "keyId": "my-custom-key-id",
-      "apiProvider": "openai",
-      "algorithm": "AES-256-GCM",
-      "keyVersion": 1,
-      "active": true,
-      "usageCount": 150,
-      "lastUsed": "2025-01-13T09:30:00.000Z",
-      "createdAt": "2025-01-01T00:00:00.000Z"
-    }
-  ]
-}
-```
+Lists split keys created by the authenticated user.
 
 ### GET /api/split-key/:keyId
 
-Get details for a specific split key.
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "key": {
-    "keyId": "my-custom-key-id",
-    "apiProvider": "openai",
-    "algorithm": "AES-256-GCM",
-    "keyVersion": 1,
-    "active": true,
-    "description": "Production key for mobile app",
-    "usageCount": 150,
-    "lastUsed": "2025-01-13T09:30:00.000Z",
-    "createdAt": "2025-01-01T00:00:00.000Z"
-  }
-}
-```
+Returns metadata for one split key owned by the authenticated user.
 
 ### DELETE /api/split-key/:keyId
 
-Deactivate a split key.
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "message": "Split key deactivated successfully",
-  "keyId": "my-custom-key-id"
-}
-```
+Deactivates a split key owned by the authenticated user.
 
 ### POST /api/split-key/validate
 
-Validate split key headers without making an API request.
+Validates split-key headers and checks that the key can be reconstructed.
 
-**Headers:**
-
-```
-Authorization: Bearer <JWT_TOKEN>
-X-Partial-Key-Id: my-custom-key-id
-X-Partial-Key: <CLIENT_PART>
-```
-
-**Response:**
-
-```json
-{
-  "valid": true,
-  "keyId": "my-custom-key-id",
-  "apiProvider": "openai",
-  "message": "Split key headers are valid"
-}
-```
-
----
-
-## Analytics Endpoints
+## Analytics API
 
 ### GET /analytics/my-stats
 
-Get current user's usage statistics.
+Returns analytics for the authenticated user.
 
-**Response:**
+### GET /analytics/user/:userId
 
-```json
-{
-  "userId": "user-123",
-  "period": {
-    "start": "2025-01-01T00:00:00.000Z",
-    "end": "2025-01-13T23:59:59.999Z"
-  },
-  "usage": {
-    "totalRequests": 450,
-    "successfulRequests": 445,
-    "failedRequests": 5,
-    "totalTokens": 125000,
-    "estimatedCost": 2.50
-  },
-  "byApi": {
-    "openai": { "requests": 300, "tokens": 100000 },
-    "gemini": { "requests": 150, "tokens": 25000 }
-  },
-  "quotas": {
-    "daily": { "used": 45, "limit": 100 },
-    "monthly": { "used": 450, "limit": 3000 }
-  }
-}
-```
+Returns analytics for the requested user. Users can access only their own records unless `X-Admin-Key` is valid.
 
-### GET /analytics/overview (Admin)
+### GET /analytics/overview
 
-Get system-wide statistics.
+Admin-only system overview. Requires JWT and `X-Admin-Key`.
 
-**Headers:**
+### GET /analytics/costs
 
-```
-Authorization: Bearer <JWT_TOKEN>
-X-Admin-Key: <ADMIN_API_KEY>
-```
+Admin-only cost breakdown. Requires JWT and `X-Admin-Key`.
 
-**Response:**
+### GET /analytics/errors
 
-```json
-{
-  "period": {
-    "start": "2025-01-01T00:00:00.000Z",
-    "end": "2025-01-13T23:59:59.999Z"
-  },
-  "totals": {
-    "users": 1500,
-    "requests": 45000,
-    "tokens": 12500000,
-    "cost": 250.00
-  },
-  "byApi": {
-    "openai": { "requests": 30000, "tokens": 10000000 },
-    "gemini": { "requests": 15000, "tokens": 2500000 }
-  }
-}
-```
+Admin-only error statistics. Requires JWT and `X-Admin-Key`.
 
-### GET /analytics/costs (Admin)
+## Admin API
 
-Get cost breakdown by API.
+All `/admin/*` routes require `X-Admin-Key` and are protected by the admin rate limiter.
 
-### GET /analytics/errors (Admin)
+### Users
 
-Get error statistics.
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/admin/users` | List users. |
+| GET | `/admin/users/:userId` | Get one user. |
+| POST | `/admin/users` | Create a user. |
+| PUT | `/admin/users/:userId/quota` | Update quotas. |
+| DELETE | `/admin/users/:userId` | Delete a user. |
 
----
+### IP Rules
 
-## Admin Endpoints
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/admin/ip-rules` | List IP rules. |
+| POST | `/admin/ip-rules` | Add whitelist or blacklist rule. |
+| DELETE | `/admin/ip-rules/:ip` | Remove rules for an IP. |
 
-All admin endpoints require `X-Admin-Key` header.
+### Webhooks
 
-### GET /admin/users
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/admin/webhooks` | List webhooks. |
+| POST | `/admin/webhooks` | Create webhook. |
+| POST | `/admin/webhooks/:id/test` | Send test webhook. |
+| DELETE | `/admin/webhooks/:id` | Delete webhook. |
 
-List all users with pagination.
+### Audit Logs
 
-### GET /admin/users/:userId
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/admin/audit-logs` | List audit logs. |
+| GET | `/admin/audit-logs/stats` | Audit statistics. |
+| GET | `/admin/audit-logs/failed` | Recent failed admin operations. |
 
-Get user details.
+### Temporary Abuse Blocks
 
-### PATCH /admin/users/:userId
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/admin/security/blocks` | List active in-memory abuse-guard blocks. |
+| DELETE | `/admin/security/blocks/:ip` | Remove a temporary block. |
 
-Update user quotas or status.
+### System
 
-### DELETE /admin/users/:userId
-
-Deactivate a user.
-
-### GET /admin/ip-rules
-
-List IP whitelist/blacklist rules.
-
-### POST /admin/ip-rules
-
-Add a new IP rule.
-
-### DELETE /admin/ip-rules/:id
-
-Remove an IP rule.
-
-### GET /admin/webhooks
-
-List configured webhooks.
-
-### POST /admin/webhooks
-
-Create a new webhook.
-
-### DELETE /admin/webhooks/:id
-
-Remove a webhook.
-
-### GET /admin/audit-logs
-
-Get audit logs with filtering.
-
----
-
-## Health Check Endpoints
-
-### GET /
-
-Service info.
-
-**Response:**
-
-```json
-{
-  "service": "SafeAPI-Bridge",
-  "status": "running",
-  "version": "1.0.0",
-  "message": "Server is healthy. Use /health for detailed status."
-}
-```
-
-### GET /health
-
-Detailed health check including database and API status.
-
-**Response:**
-
-```json
-{
-  "status": "healthy",
-  "timestamp": "2025-01-13T10:00:00.000Z",
-  "apis": {
-    "openai": { "configured": true, "baseUrl": "https://api.openai.com/v1" },
-    "gemini": { "configured": true, "baseUrl": "https://generativelanguage.googleapis.com/v1beta" },
-    "claude": { "configured": false, "baseUrl": "https://api.anthropic.com/v1" }
-  },
-  "infrastructure": {
-    "database": { "status": "connected", "latency": "3ms" }
-  },
-  "summary": "2/19 APIs configured"
-}
-```
-
----
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/admin/metrics` | JSON metrics. |
+| GET | `/admin/metrics/prometheus` | Prometheus text metrics. |
+| POST | `/admin/metrics/reset` | Reset in-memory metrics. |
+| GET | `/admin/log-level` | Current logger level. |
+| PUT | `/admin/log-level` | Change logger level. |
+| GET | `/admin/provider-timeouts` | Effective provider timeouts. |
 
 ## Error Responses
 
-All errors follow this format:
+Most errors use this shape:
 
 ```json
 {
   "error": "Error Type",
-  "message": "Human-readable error message",
-  "code": "ERROR_CODE",
-  "details": {}
+  "message": "Human-readable message"
 }
 ```
 
-### Common Error Codes
+Validation errors may use the structured formatter:
 
-| Status | Error | Description |
-|--------|-------|-------------|
-| 400 | Bad Request | Invalid request body or parameters |
-| 401 | Unauthorized | Missing or invalid token |
-| 403 | Forbidden | Endpoint not allowed or quota exceeded |
-| 404 | Not Found | Resource not found |
-| 429 | Too Many Requests | Rate limit exceeded |
-| 500 | Internal Server Error | Server error |
-| 502 | Bad Gateway | External API error |
-| 503 | Service Unavailable | Service temporarily unavailable |
-| 504 | Gateway Timeout | External API timeout |
-
----
-
-## Rate Limiting
-
-Default limits:
-
-- **Global**: 100 requests per hour per IP
-- **Auth endpoints**: 10 requests per minute per IP
-
-Rate limit headers:
-
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Endpoint must start with /",
+    "details": {},
+    "timestamp": "2026-05-14T10:00:00.000Z",
+    "requestId": "..."
+  }
+}
 ```
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1705142400
-```
+
+## Common Status Codes
+
+| Status | Meaning |
+| --- | --- |
+| 400 | Invalid input. |
+| 401 | Missing, invalid, or revoked authentication. |
+| 403 | Forbidden by policy, IP rules, endpoint allowlist, or quota state. |
+| 404 | Resource not found or scanner probe intentionally hidden. |
+| 429 | Rate limit or quota exceeded. |
+| 500 | Internal server error. |
+| 503 | Provider or infrastructure unavailable. |
+| 504 | Upstream timeout. |

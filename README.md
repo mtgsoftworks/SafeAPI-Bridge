@@ -1,298 +1,191 @@
-# SafeAPI-Bridge
+﻿# SafeAPI-Bridge
 
-**Secure API Gateway for AI Providers** – Protect your API keys, manage quotas, and monitor usage across OpenAI, Gemini, Claude, and 15+ AI providers.
+SafeAPI-Bridge is a production-oriented API gateway for AI providers. It keeps provider API keys out of client applications, enforces quotas and rate limits, records usage, and provides security controls for mobile and web integrations.
 
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org)
-[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+## What It Provides
 
----
+- Multi-provider proxying for OpenAI-compatible APIs, Gemini, Claude, Groq, Mistral, DeepSeek, OpenRouter, GitHub Models, Replicate, Stability, Fal, ElevenLabs, Brave, DeepL, Open-Meteo, and others configured in `src/config/apis.js`.
+- Server-key mode for centrally managed provider credentials.
+- BYOK split-key mode for user-supplied provider keys without storing the original key in plaintext.
+- JWT-based client authentication with logout blacklist support.
+- Daily and monthly quota enforcement per user.
+- Global, auth, admin, and provider-specific rate limiting.
+- Scanner/probe blocking for common WordPress, PHP, path traversal, and automated bot traffic.
+- Admin APIs for users, quotas, IP rules, webhooks, audit logs, metrics, log level, provider timeouts, and temporary abuse blocks.
+- Protected OpenAPI documentation and Swagger UI.
 
-## 🚀 Features
+## Runtime Requirements
 
-- **Multi-Provider Support** – OpenAI, Gemini, Claude, Groq, Mistral, Cohere, and more.
-- **Split Key (BYOK)** – Secure "Bring Your Own Key" architecture that keeps API keys safe.
-- **Rate Limiting** – Global and per-provider request limits.
-- **Retry & Circuit Breaker** – Automatic retries with exponential backoff and fault tolerance.
-- **Usage Tracking** – Per-user quotas, token counting, and cost estimation.
-- **Prometheus Metrics** – Production-grade observability.
-- **Admin Dashboard** – Real-time monitoring and management.
+- Node.js 18 or later.
+- PostgreSQL for production.
+- Redis is optional and enables Bull queue support when `REDIS_URL` is set.
+- At least one configured provider API key, unless all traffic uses BYOK split keys.
 
----
-
-## 📦 Quick Start
-
-### Prerequisites
-
-- Node.js 18+
-- PostgreSQL (Railway, Supabase, etc.)
-- Redis (optional, for Bull queue)
-
-### Installation
+## Quick Start
 
 ```bash
-# Clone
-git clone https://github.com/your-org/SafeAPI-Bridge.git
-cd SafeAPI-Bridge
-
-# Install dependencies
 npm install
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
-
-# Setup database
-npx prisma generate
-npx prisma migrate deploy
-
-# Start server
+npm run prisma:generate
+npm run prisma:deploy
 npm start
 ```
 
----
+For local development:
 
-## ⚙️ Configuration
+```bash
+npm run dev
+```
 
-All configuration is done via environment variables (`.env` file):
+The service listens on `PORT` or `3000` by default.
 
-### Core Settings
+## Required Production Configuration
 
-```ini
-# Server
-PORT=3003
+Set these values in your hosting provider's environment variable panel. Do not commit them.
+
+```env
 NODE_ENV=production
-
-# Database (PostgreSQL)
-DATABASE_URL=postgresql://user:password@host:5432/dbname
-
-# Authentication
-JWT_SECRET=your-secret-key
-JWT_EXPIRES_IN=24h
-ADMIN_API_KEY=your-admin-key
+PORT=3000
+DATABASE_URL=postgresql://user:password@host:5432/database?schema=public
+JWT_SECRET=<64-plus-character-random-secret>
+ADMIN_API_KEY=<strong-random-admin-key>
 ```
 
-### API Provider Keys (Optional – Server Key Mode)
+Recommended production security settings:
 
-```ini
-OPENAI_API_KEY=sk-...
-GEMINI_API_KEY=AIza...
-CLAUDE_API_KEY=sk-ant-...
-GROQ_API_KEY=gsk_...
-```
-
-### Rate Limiting
-
-```ini
-# Global
+```env
+ALLOWED_ORIGINS=https://example.com,https://www.example.com
+ALLOW_MOBILE_NO_ORIGIN=true
 RATE_LIMIT_WINDOW_MS=3600000
 RATE_LIMIT_MAX_REQUESTS=100
-
-# Per-Provider (requests per minute)
-RATE_LIMIT_OPENAI_MAX=500
-RATE_LIMIT_GEMINI_MAX=1000
-RATE_LIMIT_CLAUDE_MAX=50
+REQUEST_TIMEOUT_MS=90000
+UPSTREAM_TIMEOUT_MS=60000
+ABUSE_GUARD_ENABLED=true
+ABUSE_GUARD_STRIKE_THRESHOLD=5
+ABUSE_GUARD_WINDOW_MS=600000
+ABUSE_GUARD_BLOCK_MS=3600000
+ABUSE_GUARD_BLOCK_AUTHENTICATED=false
 ```
 
-### Timeouts
-
-```ini
-OPENAI_TIMEOUT_MS=60000
-GEMINI_TIMEOUT_MS=30000
-CLAUDE_TIMEOUT_MS=90000
-```
-
----
-
-## 🔐 Authentication Methods
-
-### 1. Server Key Mode
-
-The server uses API keys stored in `.env`. Users authenticate with JWT tokens.
+Generate strong secrets with:
 
 ```bash
-# Get JWT token
-curl -X POST http://localhost:3003/auth/token \
-  -H "Content-Type: application/json" \
-  -d '{"userId": "user123", "appId": "myApp"}'
-
-# Use token for API requests
-curl -X POST http://localhost:3003/api/openai/proxy \
-  -H "Authorization: Bearer <JWT_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"endpoint": "/chat/completions", "model": "gpt-4", "messages": [...]}'
+node -e "console.log(require('crypto').randomBytes(64).toString('base64url'))"
 ```
 
-### 2. Split Key (BYOK) Mode
+## Provider Configuration
 
-Users bring their own API keys, which are split and stored securely.
+Provider keys are optional per provider. Configure only the providers you use.
 
-```bash
-# Split your API key
-curl -X POST http://localhost:3003/api/split-key/split \
-  -H "Authorization: Bearer <JWT_TOKEN>" \
-  -d '{"originalKey": "sk-...", "apiProvider": "openai"}'
-
-# Response: { keyId: "abc123", clientPart: "xyz789" }
-
-# Use split key for requests
-curl -X POST http://localhost:3003/api/openai/proxy \
-  -H "Authorization: Bearer <JWT_TOKEN>" \
-  -H "X-Partial-Key-Id: abc123" \
-  -H "X-Partial-Key: xyz789" \
-  -d '{"endpoint": "/chat/completions", ...}'
+```env
+GEMINI_API_KEY=<gemini-key>
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+OPENAI_API_KEY=<openai-key>
+OPENAI_BASE_URL=https://api.openai.com/v1
+GITHUB_MODELS_API_KEY=<github-models-token>
 ```
 
----
+Do not reuse broad GitHub personal access tokens unless required. Prefer least-privilege tokens and rotate them regularly.
 
-## 📡 API Endpoints
+## Core API Flow
 
-### Authentication
+1. Client requests a JWT from `POST /auth/token` using `userId` and `appId`.
+2. Client calls `POST /api/:provider/proxy` with `Authorization: Bearer <JWT>`.
+3. Server validates IP rules, JWT, quota, provider rate limits, split-key headers if present, and endpoint whitelist.
+4. Server forwards the request to the provider with the provider credential resolved on the server.
+5. Server records usage and returns the provider response.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/token` | Generate JWT token |
-| GET | `/auth/verify` | Verify JWT token |
-| GET | `/auth/token-info` | Get token details |
+## Important Endpoints
 
-### Proxy
+| Area | Method | Endpoint | Access |
+| --- | --- | --- | --- |
+| Health | GET | `/` | Public minimal service info |
+| Health | GET | `/health` | Public minimal status; detailed with `X-Admin-Key` |
+| Auth | POST | `/auth/token` | Public, rate limited |
+| Auth | GET | `/auth/verify` | JWT |
+| Proxy | POST/GET | `/api/:provider/proxy` | JWT |
+| Provider metadata | GET | `/api/:provider/endpoints` | JWT |
+| BYOK | POST | `/api/split-key/split` | JWT |
+| Analytics | GET | `/analytics/my-stats` | JWT |
+| Admin | any | `/admin/*` | `X-Admin-Key` |
+| Documentation | GET | `/api-docs`, `/api-docs.json`, `/api-docs.yaml` | `X-Admin-Key` |
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/:provider/proxy` | Forward request to AI provider |
-| GET | `/api/:provider/endpoints` | List allowed endpoints |
+## Protected Documentation Access
 
-### Split Key (BYOK)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/split-key/split` | Create split key |
-| GET | `/api/split-key` | List user's split keys |
-| DELETE | `/api/split-key/:keyId` | Deactivate split key |
-
-### Admin (Requires `X-Admin-Key` header)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/admin/users` | List all users |
-| GET | `/admin/metrics` | System metrics (JSON) |
-| GET | `/admin/metrics/prometheus` | Prometheus format |
-| PUT | `/admin/log-level` | Change log level |
-| GET | `/admin/provider-timeouts` | View timeout config |
-
-### Analytics
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/analytics/my-stats` | Current user's stats |
-| GET | `/analytics/usage` | Detailed usage data |
-
----
-
-## 🛠️ Supported Providers
-
-| Provider | Status | Streaming |
-|----------|--------|-----------|
-| OpenAI | ✅ | ✅ |
-| Google Gemini | ✅ | ✅ |
-| Anthropic Claude | ✅ | ✅ |
-| Groq | ✅ | ✅ |
-| Mistral | ✅ | ✅ |
-| Cohere | ✅ | ✅ |
-| Perplexity | ✅ | ✅ |
-| Together AI | ✅ | ✅ |
-| OpenRouter | ✅ | ✅ |
-| DeepSeek | ✅ | ✅ |
-| xAI (Grok) | ✅ | ✅ |
-| Fireworks | ✅ | ✅ |
-| Replicate | ✅ | ❌ |
-
----
-
-## 🚂 Deploy to Railway
+OpenAPI and Swagger are not public. Use the admin key:
 
 ```bash
-# 1. Push to GitHub
-git push origin main
-
-# 2. Create Railway project
-# 3. Add PostgreSQL addon
-# 4. Set environment variables in Railway dashboard
-# 5. Set build command:
-npx prisma generate && npx prisma migrate deploy && npm start
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/api-docs.json
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/api-docs.yaml
 ```
 
----
+`/api-docs` is also protected. Direct browser navigation cannot add `X-Admin-Key`; use an internal admin tool, a secure reverse proxy, or a browser extension for header injection when needed.
 
-## 🧪 Testing
+## Security Notes
+
+- Set `NODE_ENV=production` in live deployments. This enables production behavior such as HTTPS enforcement.
+- Rotate any secret that has been posted in chat, logs, screenshots, tickets, or source control.
+- Keep `ALLOWED_ORIGINS` restricted to production domains in production.
+- Keep `ALLOW_MOBILE_NO_ORIGIN=true` only when native mobile clients require requests without an `Origin` header.
+- Abuse guard blocks scanner probes before body parsing and routing. Temporary blocks are in-memory and reset on process restart.
+- Use persistent IP blacklist rules for known hostile IPs that must survive restarts.
+- Protect database backups. BYOK records do not store plaintext keys, but the database still contains sensitive key material that must be treated as confidential.
+
+## Admin Operations
+
+Temporary abuse blocks:
 
 ```bash
-# Run all tests
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/admin/security/blocks
+curl -X DELETE -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/admin/security/blocks/52.138.6.165
+```
+
+Metrics:
+
+```bash
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/admin/metrics
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/admin/metrics/prometheus
+```
+
+## Testing
+
+The full test suite expects the test environment to be aligned with the active Prisma datasource. Because the current schema uses PostgreSQL, CI should provide a PostgreSQL-compatible `DATABASE_URL` or mock Prisma for suites that do not require a real database.
+
+```bash
 npm test
-
-# Run unit tests only
 npm run test:unit
-
-# Run with coverage
-npm test -- --coverage
+npm run test:security
+npm run test:integration
 ```
 
----
+Targeted security checks used for recent hardening:
 
-## 📊 Monitoring
-
-### Health Check
-
-```
-GET /health
+```bash
+npx jest tests/unit/abuseGuard.test.js tests/unit/securityMonitor.test.js tests/unit/proxy.controller.test.js tests/security/adminAuth.test.js --runInBand --coverage=false
 ```
 
-### Prometheus Metrics
+## Repository Layout
 
-```
-GET /admin/metrics/prometheus
-```
-
-Metrics include:
-
-- Request counts (by provider, status)
-- Response times (p50, p95, p99)
-- Rate limit events
-- Circuit breaker status
-- Memory usage
-
----
-
-## 📁 Project Structure
-
-```
-SafeAPI-Bridge/
-├── src/
-│   ├── config/         # Configuration (env, apis, constants)
-│   ├── controllers/    # Request handlers
-│   ├── middleware/     # Auth, rate limiting, security
-│   ├── models/         # Database models (Prisma wrappers)
-│   ├── routes/         # API routes
-│   ├── services/       # Business logic
-│   ├── utils/          # Helpers
-│   └── server.js       # Entry point
-├── prisma/
-│   └── schema.prisma   # Database schema
-├── tests/              # Test suites
-└── scripts/            # Utility scripts
+```text
+src/config       Provider, security, environment, and constants
+src/controllers  Route handlers
+src/middleware   Auth, rate limiting, abuse guard, CORS, logging, security
+src/models       Prisma model wrappers
+src/routes       Express route modules
+src/services     Proxying, split key, usage, analytics, queue, webhook, audit
+src/utils        Validation, crypto, logging, errors, URL safety helpers
+prisma           Prisma schema and migrations
+docs             Operational documentation
+tests            Unit, integration, security, and performance tests
 ```
 
----
+## Additional Documentation
 
-## 📄 License
+- `docs/API_REFERENCE.md`
+- `docs/ARCHITECTURE.md`
+- `docs/SECURITY.md`
+- `docs/DEPLOYMENT.md`
+- `openapi.yaml`
 
-MIT License – see [LICENSE](LICENSE) for details.
+## License
 
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing`)
-5. Open a Pull Request
+MIT. See `LICENSE`.

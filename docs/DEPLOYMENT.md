@@ -1,485 +1,273 @@
-# SafeAPI-Bridge Deployment Guide
+﻿# SafeAPI-Bridge Deployment Guide
 
-## Table of Contents
+This guide describes how to deploy SafeAPI-Bridge safely in production. It is written for environments such as Render, Railway, Docker, VM/PM2, or any Node.js 18+ platform with PostgreSQL.
 
-1. [Prerequisites](#prerequisites)
-2. [Local Development](#local-development)
-3. [Production Deployment](#production-deployment)
-4. [Docker Deployment](#docker-deployment)
-5. [Cloud Platforms](#cloud-platforms)
-6. [Environment Configuration](#environment-configuration)
-7. [Database Setup](#database-setup)
-8. [Security Checklist](#security-checklist)
-9. [Monitoring & Logging](#monitoring--logging)
-10. [Troubleshooting](#troubleshooting)
+## Production Requirements
 
----
+- Node.js 18 or later.
+- PostgreSQL database reachable through `DATABASE_URL`.
+- At least one provider API key, unless all users rely on BYOK split-key mode.
+- A strong `JWT_SECRET` and `ADMIN_API_KEY` stored only in the hosting platform secret manager.
+- HTTPS termination at the platform load balancer or reverse proxy.
+- Optional Redis instance for Bull queue support. Without Redis, the queue falls back to in-memory behavior.
 
-## Prerequisites
+## Required Environment Variables
 
-- **Node.js**: v18 or higher
-- **npm**: v9 or higher
-- **Database**: SQLite (dev) or PostgreSQL (production)
-- **At least one AI provider API key**
+Set these variables in the production platform, not in a committed file.
 
----
+```env
+NODE_ENV=production
+PORT=3000
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DB?schema=public
+JWT_SECRET=<64+ character random secret>
+ADMIN_API_KEY=<48+ character random admin key>
+ALLOWED_ORIGINS=https://calmsmartliving.com,https://www.calmsmartliving.com
+ALLOW_MOBILE_NO_ORIGIN=true
+```
 
-## Local Development
+Use `ALLOW_MOBILE_NO_ORIGIN=true` only when native mobile clients call the API without an `Origin` header. Browser origins are still checked with exact-match CORS rules.
 
-### 1. Clone and Install
+## Recommended Production Variables
+
+```env
+RATE_LIMIT_WINDOW_MS=3600000
+RATE_LIMIT_MAX_REQUESTS=100
+REQUEST_TIMEOUT_MS=90000
+UPSTREAM_TIMEOUT_MS=60000
+LOG_LEVEL=info
+LOG_DIR=./logs
+LOG_MAX_FILES=30d
+
+ABUSE_GUARD_ENABLED=true
+ABUSE_GUARD_STRIKE_THRESHOLD=5
+ABUSE_GUARD_WINDOW_MS=600000
+ABUSE_GUARD_BLOCK_MS=3600000
+ABUSE_GUARD_BLOCK_AUTHENTICATED=false
+```
+
+Provider keys are configured only for providers you use:
+
+```env
+OPENAI_API_KEY=<openai-key>
+GEMINI_API_KEY=<gemini-key>
+CLAUDE_API_KEY=<claude-key>
+GROQ_API_KEY=<groq-key>
+MISTRAL_API_KEY=<mistral-key>
+GITHUB_MODELS_API_KEY=<github-models-token>
+```
+
+Optional infrastructure:
+
+```env
+REDIS_URL=redis://default:PASSWORD@HOST:6379
+QUEUE_MAX_CONCURRENT=10
+QUEUE_MAX_SIZE=1000
+API_RETRY_ATTEMPTS=3
+RETRY_MAX_DELAY_MS=30000
+```
+
+## Secret Generation
+
+Generate production secrets locally and store only the resulting values in the platform secret manager.
 
 ```bash
-git clone https://github.com/yourusername/safeapi-bridge.git
-cd safeapi-bridge
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+node -e "console.log(require('crypto').randomBytes(64).toString('base64url'))"
+```
+
+Use the shorter output for `ADMIN_API_KEY` and the longer output for `JWT_SECRET`, or generate both at 64 bytes. Do not reuse development or test values.
+
+## Local Preparation
+
+```bash
 npm install
-```
-
-### 2. Configure Environment
-
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-### 3. Setup Database
-
-```bash
-# Generate Prisma client
 npm run prisma:generate
-
-# Run migrations
-npm run prisma:migrate
+npm test
 ```
 
-### 4. Start Development Server
+For local development with the current Prisma schema, use PostgreSQL. The schema provider is `postgresql`, so SQLite connection strings are not valid unless the Prisma schema is intentionally changed.
+
+## Production Deployment Steps
+
+1. Configure the production environment variables in the hosting platform.
+2. Install dependencies with `npm install` or `npm ci`.
+3. Generate the Prisma client with `npm run prisma:generate`.
+4. Apply migrations with `npm run prisma:deploy`.
+5. Start the service with `npm start`.
+6. Verify `/health` and a protected docs endpoint.
+
+Typical command sequence:
 
 ```bash
-npm run dev
-```
-
-Server runs at `http://localhost:3000` with hot reload.
-
----
-
-## Production Deployment
-
-### 1. Environment Setup
-
-```bash
-# Set NODE_ENV
-export NODE_ENV=production
-
-# Generate strong JWT secret
-export JWT_SECRET=$(openssl rand -base64 64)
-
-# Set admin key
-export ADMIN_API_KEY=$(openssl rand -base64 32)
-```
-
-### 2. Database Migration
-
-```bash
-# Deploy migrations without creating new ones
+npm ci
+npm run prisma:generate
 npm run prisma:deploy
-```
-
-### 3. Build and Start
-
-```bash
-# Start production server
 npm start
 ```
 
-### 4. Process Manager (PM2)
+## Render Deployment
 
-```bash
-# Install PM2
-npm install -g pm2
+Recommended settings:
 
-# Start with PM2
-pm2 start src/server.js --name safeapi-bridge
+- Build command: `npm install && npm run prisma:generate`
+- Start command: `npm run prisma:deploy && npm start`
+- Runtime: Node.js 18+
+- Environment: set all required variables in Render Environment, not in the repository.
 
-# Save process list
-pm2 save
+Render-style interpolation such as `${{Postgres.DATABASE_URL}}` should be used only inside the Render dashboard. Do not place that literal in a local `.env` file.
 
-# Setup startup script
-pm2 startup
-```
+## Railway Deployment
 
-### PM2 Ecosystem File
-
-Create `ecosystem.config.js`:
-
-```javascript
-module.exports = {
-  apps: [{
-    name: 'safeapi-bridge',
-    script: 'src/server.js',
-    instances: 'max',
-    exec_mode: 'cluster',
-    env_production: {
-      NODE_ENV: 'production',
-      PORT: 3000
-    },
-    max_memory_restart: '500M',
-    error_file: './logs/pm2-error.log',
-    out_file: './logs/pm2-out.log',
-    merge_logs: true
-  }]
-};
-```
-
-```bash
-pm2 start ecosystem.config.js --env production
-```
-
----
+1. Create a Railway project from the repository.
+2. Add a PostgreSQL service.
+3. Set `DATABASE_URL` from Railway's PostgreSQL connection string.
+4. Add `NODE_ENV=production`, `JWT_SECRET`, `ADMIN_API_KEY`, `ALLOWED_ORIGINS`, and provider keys.
+5. Use `npm run prisma:deploy && npm start` as the start command if the platform does not run migrations separately.
 
 ## Docker Deployment
 
-### Dockerfile
-
-Create `Dockerfile`:
+Example Dockerfile:
 
 ```dockerfile
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
-COPY prisma ./prisma/
-
-# Install dependencies
-RUN npm ci --only=production
-
-# Generate Prisma client
+COPY prisma ./prisma
+RUN npm ci --omit=dev
 RUN npx prisma generate
 
-# Copy source code
-COPY src ./src/
+COPY src ./src
+COPY openapi.yaml ./openapi.yaml
 
-# Create logs directory
-RUN mkdir -p logs
-
-# Expose port
+ENV NODE_ENV=production
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
-
-# Start server
-CMD ["node", "src/server.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]
 ```
 
-### Docker Compose
-
-Create `docker-compose.yml`:
+Example compose file:
 
 ```yaml
-version: '3.8'
-
 services:
-  safeapi-bridge:
+  api:
     build: .
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:password@db:5432/safeapi
-      - JWT_SECRET=${JWT_SECRET}
-      - ADMIN_API_KEY=${ADMIN_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/safeapi?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      ALLOWED_ORIGINS: https://calmsmartliving.com,https://www.calmsmartliving.com
+      ALLOW_MOBILE_NO_ORIGIN: "true"
     depends_on:
       - db
-    restart: unless-stopped
-    volumes:
-      - ./logs:/app/logs
 
   db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=safeapi
+      POSTGRES_DB: safeapi
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
 
 volumes:
   postgres_data:
 ```
 
-### Build and Run
+Do not use the example database password in a real deployment.
+
+## PM2 Deployment
 
 ```bash
-# Build image
-docker build -t safeapi-bridge .
-
-# Run with Docker Compose
-docker-compose up -d
-
-# View logs
-docker-compose logs -f safeapi-bridge
-```
-
----
-
-## Cloud Platforms
-
-### Render
-
-1. Create a new Web Service
-2. Connect your GitHub repository
-3. Configure:
-   - **Build Command**: `npm install && npm run prisma:generate`
-   - **Start Command**: `npm start`
-   - **Environment Variables**: Add all required vars
-
-### Railway
-
-1. Create new project from GitHub
-2. Add PostgreSQL database
-3. Configure environment variables
-4. Deploy
-
-### Heroku
-
-```bash
-# Login to Heroku
-heroku login
-
-# Create app
-heroku create safeapi-bridge
-
-# Add PostgreSQL
-heroku addons:create heroku-postgresql:hobby-dev
-
-# Set environment variables
-heroku config:set NODE_ENV=production
-heroku config:set JWT_SECRET=$(openssl rand -base64 64)
-
-# Deploy
-git push heroku main
-
-# Run migrations
-heroku run npm run prisma:deploy
-```
-
-### AWS (Elastic Beanstalk)
-
-1. Install EB CLI: `pip install awsebcli`
-2. Initialize: `eb init`
-3. Create environment: `eb create production`
-4. Set environment variables in AWS Console
-5. Deploy: `eb deploy`
-
-### Google Cloud Run
-
-```bash
-# Build and push image
-gcloud builds submit --tag gcr.io/PROJECT_ID/safeapi-bridge
-
-# Deploy
-gcloud run deploy safeapi-bridge \
-  --image gcr.io/PROJECT_ID/safeapi-bridge \
-  --platform managed \
-  --allow-unauthenticated \
-  --set-env-vars "NODE_ENV=production,JWT_SECRET=..."
-```
-
----
-
-## Environment Configuration
-
-### Required Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `NODE_ENV` | Environment | `production` |
-| `PORT` | Server port | `3000` |
-| `JWT_SECRET` | JWT signing secret | `64+ char random string` |
-| `DATABASE_URL` | Database connection | `postgresql://...` |
-| `ADMIN_API_KEY` | Admin access key | `32+ char random string` |
-
-### Optional Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LIGHT_MODE` | Minimal resource mode | `false` |
-| `RATE_LIMIT_WINDOW_MS` | Rate limit window | `3600000` (1 hour) |
-| `RATE_LIMIT_MAX_REQUESTS` | Max requests/window | `100` |
-| `ALLOWED_ORIGINS` | CORS origins | `*` |
-| `REQUEST_TIMEOUT_MS` | Request timeout | `30000` |
-| `LOG_DIR` | Log directory | `./logs` |
-| `REDIS_URL` | Redis URL for queue (optional) | - |
-| `QUEUE_MAX_CONCURRENT` | Max concurrent queue jobs | `10` |
-| `QUEUE_MAX_SIZE` | Max queue size | `1000` |
-| `API_RETRY_ATTEMPTS` | Retry attempts for API calls | `3` |
-| `API_RETRY_DELAY_MS` | Initial retry delay | `1000` |
-| `RETRY_MAX_DELAY_MS` | Max delay for backoff | `30000` |
-
----
-
-## Database Setup
-
-### SQLite (Development)
-
-```env
-DATABASE_URL=file:./dev.db
-```
-
-### PostgreSQL (Production)
-
-```env
-DATABASE_URL=postgresql://user:password@host:5432/database?schema=public
-```
-
-### Migration Commands
-
-```bash
-# Create new migration (development)
-npm run prisma:migrate
-
-# Apply migrations (production)
-npm run prisma:deploy
-
-# Generate client
+npm ci --omit=dev
 npm run prisma:generate
-
-# View database (development)
-npm run prisma:studio
+npm run prisma:deploy
+pm2 start src/server.js --name safeapi-bridge --env production
+pm2 save
 ```
 
----
+Use the process manager or host-level environment to inject secrets. Do not place production secrets in `ecosystem.config.js` if it is committed.
+
+## Protected Documentation Access
+
+The documentation endpoints are intentionally not public. They require `X-Admin-Key`.
+
+```bash
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/api-docs.json
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/api-docs.yaml
+```
+
+Swagger UI at `/api-docs` is also protected. A normal browser navigation cannot add `X-Admin-Key` by itself; use an internal admin tool, a trusted reverse proxy that injects the header, or fetch the raw spec with `curl` and view it locally.
+
+## Health Checks
+
+Unauthenticated health check:
+
+```bash
+curl https://api.example.com/health
+```
+
+The public health response is intentionally minimal. When the request includes a valid `X-Admin-Key`, the health controller may include additional operational detail.
+
+## CI/CD Checklist
+
+Before deployment, run:
+
+```bash
+npm test
+npm run prisma:generate
+npm run prisma:deploy -- --help
+```
+
+Pipeline recommendations:
+
+- Install with a clean dependency command (`npm ci` when lockfile consistency is enforced).
+- Provide a PostgreSQL-compatible test `DATABASE_URL` for suites that touch Prisma, or mock Prisma explicitly in non-database suites.
+- Run unit and security tests on every pull request.
+- Run Prisma validation or generation before packaging.
+- Apply migrations once per deployment, before accepting traffic.
+- Do not print secrets in build logs.
+- Keep deployment of code and environment changes coordinated when changing security behavior.
 
 ## Security Checklist
 
-### Before Production
+- `NODE_ENV=production` is set.
+- `JWT_SECRET` is strong, random, and not reused from development.
+- `ADMIN_API_KEY` is strong, random, and not exposed to clients.
+- Public docs are protected by `X-Admin-Key`.
+- `ALLOWED_ORIGINS` contains only production browser origins.
+- `ALLOW_MOBILE_NO_ORIGIN=true` is used only because the mobile app requires it.
+- Scanner abuse guard is enabled.
+- Admin routes and analytics admin endpoints are not exposed through a public frontend.
+- Database backups and retention policy are configured.
+- Provider keys are rotated if they were ever pasted in logs, chat, tickets, or commits.
 
-- [ ] Generate strong `JWT_SECRET` (64+ characters)
-- [ ] Generate strong `ADMIN_API_KEY`
-- [ ] Configure `ALLOWED_ORIGINS` for CORS
-- [ ] Set `NODE_ENV=production`
-- [ ] Enable HTTPS (via reverse proxy or cloud platform)
-- [ ] Configure rate limiting appropriately
-- [ ] Set up IP whitelist/blacklist if needed
-- [ ] Review and configure logging
-- [ ] Set up monitoring and alerting
-- [ ] Backup database regularly
+## Operations
 
-### Reverse Proxy (Nginx)
-
-```nginx
-server {
-    listen 80;
-    server_name api.yourdomain.com;
-    return 301 https://$server_name$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name api.yourdomain.com;
-
-    ssl_certificate /etc/letsencrypt/live/api.yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.yourdomain.com/privkey.pem;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        proxy_read_timeout 60s;
-    }
-}
-```
-
----
-
-## Monitoring & Logging
-
-### Log Files
-
-- `logs/security-*.log` - Security events
-- `logs/error-*.log` - Error logs
-- `logs/combined-*.log` - All logs
-
-### Health Check Endpoint
+Useful admin endpoints:
 
 ```bash
-curl https://api.yourdomain.com/health
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/admin/security/blocks
+curl -X DELETE -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/admin/security/blocks/203.0.113.10
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://api.example.com/admin/metrics
 ```
 
-### Metrics to Monitor
+Operational notes:
 
-- Request latency (p50, p95, p99)
-- Error rate
-- Database connection health
-- Memory usage
-- API quota usage per user
+- Temporary abuse blocks are in memory and reset when the process restarts.
+- Persistent IP whitelist and blacklist rules are stored in PostgreSQL through the `IpRule` model.
+- Request logs and security logs are written through Winston and may need platform log shipping in stateless deployments.
+- Redis is recommended when queue behavior must survive process restarts.
 
-### Alerting Recommendations
+## Rollback Procedure
 
-- Database connection failures
-- High error rate (>5%)
-- Memory usage >80%
-- Response time >5s
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-**Database connection errors:**
-
-```bash
-# Check DATABASE_URL format
-# Ensure database is running and accessible
-npm run prisma:generate
-```
-
-**JWT errors:**
-
-```bash
-# Ensure JWT_SECRET is set
-# Check token expiration
-```
-
-**CORS errors:**
-
-```bash
-# Configure ALLOWED_ORIGINS correctly
-# For mobile apps, set ALLOW_MOBILE_NO_ORIGIN=true
-```
-
-**Rate limiting:**
-
-```bash
-# Increase RATE_LIMIT_MAX_REQUESTS if needed
-# Check if behind proxy (trust proxy setting)
-```
-
-### Debug Mode
-
-```bash
-# Enable debug logging
-DEBUG=* npm run dev
-```
-
-### Check Logs
-
-```bash
-# View recent errors
-tail -f logs/error-*.log
-
-# Search for specific errors
-grep "ERROR" logs/combined-*.log
-```
+1. Stop new deployments immediately.
+2. Roll back the application image or commit to the last known good version.
+3. Do not roll back database migrations blindly. Review whether a down migration or forward fix is safer.
+4. Keep compromised secrets rotated even after rollback.
+5. Review `logs/security-*.log`, platform request logs, and admin audit logs before reopening admin access.

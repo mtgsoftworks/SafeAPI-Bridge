@@ -24,18 +24,12 @@ const hashAdminKey = (key) => {
  * Prevents timing attacks by ensuring constant-time comparison
  */
 const timingSafeCompare = (a, b) => {
-  if (!a || !b) return false;
-
-  // Ensure same length (pad shorter one)
-  const maxLen = Math.max(a.length, b.length);
-  const bufferA = Buffer.alloc(maxLen);
-  const bufferB = Buffer.alloc(maxLen);
-
-  bufferA.write(a);
-  bufferB.write(b);
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
 
   try {
-    return crypto.timingSafeEqual(bufferA, bufferB);
+    const hashA = crypto.createHash('sha256').update(a).digest();
+    const hashB = crypto.createHash('sha256').update(b).digest();
+    return crypto.timingSafeEqual(hashA, hashB) && a.length === b.length;
   } catch (error) {
     return false;
   }

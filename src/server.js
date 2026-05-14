@@ -25,6 +25,7 @@ const httpsEnforcement = require('./middleware/httpsEnforcement');
 const requestTimeout = require('./middleware/requestTimeout');
 const { inputSanitizer } = require('./middleware/inputSanitizer');
 const { smartCompression } = require('./middleware/compression');
+const abuseGuard = require('./middleware/abuseGuard');
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -64,6 +65,9 @@ app.use(helmet({
 
 // HTTPS enforcement (production only)
 app.use(httpsEnforcement);
+
+// Block scanner probes before body parsing and route handling
+app.use(abuseGuard);
 
 // CORS
 app.use(corsConfig);

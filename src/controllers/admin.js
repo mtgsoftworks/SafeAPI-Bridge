@@ -7,6 +7,7 @@ const { validateURL } = require('../utils/urlValidator');
 const metricsService = require('../services/metricsService');
 const { setLogLevel, getLogLevel } = require('../utils/securityLogger');
 const config = require('../config/env');
+const abuseGuardService = require('../services/abuseGuard');
 
 /**
  * Admin Controller
@@ -411,6 +412,58 @@ const AdminController = {
 
             res.json(failedOps);
         } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    },
+
+    // ==================== SECURITY BLOCKS ====================
+
+    /**
+     * List active temporary abuse-guard blocks
+     */
+    async listSecurityBlocks(req, res) {
+        try {
+            const blocks = abuseGuardService.listBlocks();
+            res.json({
+                blocks,
+                count: blocks.length,
+                settings: abuseGuardService.getSettings()
+            });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    },
+
+    /**
+     * Remove a temporary abuse-guard block
+     */
+    async removeSecurityBlock(req, res) {
+        try {
+            const { ip } = req.params;
+            const removed = abuseGuardService.unblockIp(ip);
+
+            await auditLogService.createAuditLog({
+                action: 'security_block.remove',
+                adminKeyHash: req.admin.keyHash,
+                ipAddress: req.admin.ip,
+                userAgent: req.headers['user-agent'],
+                details: { blockedIp: ip, removed },
+                success: true
+            });
+
+            res.json({
+                success: true,
+                removed,
+                ip
+            });
+        } catch (error) {
+            await auditLogService.logFailedOperation(
+                'security_block.remove',
+                req.admin.keyHash,
+                req.admin.ip,
+                req.headers['user-agent'],
+                error
+            );
             res.status(500).json({ error: error.message });
         }
     },

@@ -36,6 +36,10 @@ router.get('/audit-logs', adminAuth, AdminController.getAuditLogs);
 router.get('/audit-logs/stats', adminAuth, AdminController.getAuditStats);
 router.get('/audit-logs/failed', adminAuth, AdminController.getFailedOperations);
 
+// ==================== SECURITY BLOCKS ====================
+router.get('/security/blocks', adminAuth, AdminController.listSecurityBlocks);
+router.delete('/security/blocks/:ip', adminAuth, AdminController.removeSecurityBlock);
+
 // ==================== SYSTEM MANAGEMENT ====================
 router.get('/metrics', adminAuth, AdminController.getMetrics);
 router.get('/metrics/prometheus', adminAuth, AdminController.getPrometheusMetrics);

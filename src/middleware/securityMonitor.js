@@ -1,6 +1,7 @@
 const { logger, logSuspiciousActivity } = require('../utils/securityLogger');
 const { SECURITY } = require('../config/constants');
 const LRUCache = require('../utils/lruCache');
+const { classifyRequestPath } = require('../services/abuseGuard');
 
 /**
  * Security Monitoring Middleware
@@ -116,14 +117,15 @@ const { containsMaliciousPattern, checkPatternType } = require('../config/securi
  */
 const detectSuspiciousPatterns = (req, res, ip) => {
   const userAgent = req.headers['user-agent'] || '';
-  const statusCode = res.statusCode;
+  const pathSignals = classifyRequestPath(req.path, userAgent);
 
-  // Detect missing user agent (bot indicator)
-  if (!userAgent && req.path !== '/health' && req.path !== '/') {
+  // Missing UA alone is too noisy; treat it as high severity only with scanner paths.
+  if (!userAgent && req.path !== '/health' && req.path !== '/' && pathSignals.isProbe) {
     logSuspiciousActivity('MISSING_USER_AGENT', {
       ip,
       path: req.path,
-      method: req.method
+      method: req.method,
+      reasons: pathSignals.reasons
     });
   }
 

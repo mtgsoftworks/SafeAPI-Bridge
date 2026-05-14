@@ -17,18 +17,22 @@ describe('Admin Authentication Security', () => {
       const invalidKey1 = 'b' + 'a'.repeat(99); // Differs at first char
       const invalidKey2 = 'a'.repeat(99) + 'b'; // Differs at last char
 
-      // Time both comparisons
-      const start1 = process.hrtime.bigint();
-      timingSafeCompare(validKey, invalidKey1);
-      const time1 = process.hrtime.bigint() - start1;
+      const measure = (candidate) => {
+        const iterations = 5000;
+        const start = process.hrtime.bigint();
+        for (let i = 0; i < iterations; i++) {
+          timingSafeCompare(validKey, candidate);
+        }
+        return process.hrtime.bigint() - start;
+      };
 
-      const start2 = process.hrtime.bigint();
-      timingSafeCompare(validKey, invalidKey2);
-      const time2 = process.hrtime.bigint() - start2;
+      // Aggregate measurements avoid single-call timer noise.
+      const time1 = measure(invalidKey1);
+      const time2 = measure(invalidKey2);
 
       // Times should be within reasonable range (not drastically different)
       // This is a rough test - timing attacks are subtle
-      const ratio = Number(time1) / Number(time2);
+      const ratio = Number(time1 > time2 ? time1 : time2) / Number(time1 > time2 ? time2 : time1);
       expect(ratio).toBeGreaterThan(0.5);
       expect(ratio).toBeLessThan(2.0);
     });

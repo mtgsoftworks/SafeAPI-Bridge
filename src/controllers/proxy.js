@@ -208,7 +208,7 @@ const proxyRequest = async (req, res) => {
       res.status(response.status).json(response.data);
     }
   } catch (error) {
-    handleProxyError(error, req, res, startTime);
+    handleProxyErrorInternal(error, req, res, startTime);
   }
 };
 

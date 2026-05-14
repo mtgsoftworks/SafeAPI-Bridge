@@ -9,7 +9,8 @@ jest.mock('../../src/utils/securityLogger', () => ({
     error: jest.fn(),
     warn: jest.fn()
   },
-  logSuspiciousActivity: jest.fn()
+  logSuspiciousActivity: jest.fn(),
+  logSecurityEvent: jest.fn()
 }));
 
 jest.mock('../../src/config/constants', () => ({
@@ -156,17 +157,31 @@ describe('Security Monitor Middleware', () => {
       expect(mockRes.on).toHaveBeenCalledWith('finish', expect.any(Function));
     });
 
-    it('should detect missing user agent on non-health routes', () => {
+    it('should not flag missing user agent without scanner signals', () => {
       mockReq.headers['user-agent'] = '';
       mockReq.path = '/api/sensitive';
 
       securityMonitor(mockReq, mockRes, mockNext);
       mockRes._finishCallback(); // Simulate response finish
 
+      expect(logSuspiciousActivity).not.toHaveBeenCalledWith(
+        'MISSING_USER_AGENT',
+        expect.anything()
+      );
+    });
+
+    it('should detect missing user agent on scanner probe routes', () => {
+      mockReq.headers['user-agent'] = '';
+      mockReq.path = '/wp-blog.php';
+
+      securityMonitor(mockReq, mockRes, mockNext);
+      mockRes._finishCallback();
+
       expect(logSuspiciousActivity).toHaveBeenCalledWith(
         'MISSING_USER_AGENT',
         expect.objectContaining({
-          path: '/api/sensitive'
+          path: '/wp-blog.php',
+          reasons: expect.arrayContaining(['WORDPRESS_PROBE'])
         })
       );
     });

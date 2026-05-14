@@ -21,6 +21,7 @@ const logger = require('./middleware/logger');
 const { limiter } = require('./middleware/rateLimiter');
 const { errorMiddleware, notFoundHandler } = require('./utils/errorHandler');
 const { securityMonitor } = require('./middleware/securityMonitor');
+const { adminAuth } = require('./middleware/adminAuth');
 const httpsEnforcement = require('./middleware/httpsEnforcement');
 const requestTimeout = require('./middleware/requestTimeout');
 const { inputSanitizer } = require('./middleware/inputSanitizer');
@@ -104,7 +105,7 @@ app.get('/health', healthCheck);
 
 // Swagger UI (API Documentation)
 if (swaggerDocument) {
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+  app.use('/api-docs', adminAuth, swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: 'SafeAPI-Bridge API Documentation',
     swaggerOptions: {
@@ -118,11 +119,11 @@ if (swaggerDocument) {
   }));
 
   // Serve raw OpenAPI spec
-  app.get('/api-docs.json', (req, res) => {
+  app.get('/api-docs.json', adminAuth, (req, res) => {
     res.json(swaggerDocument);
   });
 
-  app.get('/api-docs.yaml', (req, res) => {
+  app.get('/api-docs.yaml', adminAuth, (req, res) => {
     res.type('text/yaml').send(YAML.stringify(swaggerDocument, 4));
   });
 }
@@ -153,7 +154,7 @@ const server = app.listen(PORT, () => {
   console.log('\n📋 Available Endpoints:');
   console.log('  GET  /           - Service info');
   console.log('  GET  /health     - Health check');
-  console.log(`  GET  /api-docs   - ${swaggerDocument ? '📚 Swagger UI (API Documentation)' : '❌ Swagger disabled'}`);
+  console.log(`  GET  /api-docs   - ${swaggerDocument ? '📚 Swagger UI (requires X-Admin-Key)' : '❌ Swagger disabled'}`);
   console.log('  POST /auth/token - Generate JWT token (auto-creates user)');
   console.log('  GET  /auth/verify - Verify JWT token');
   console.log('  POST /api/:api/proxy - Proxy to AI API (supports both Server Key & BYOK)');
